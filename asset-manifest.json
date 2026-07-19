@@ -1,8 +1,8 @@
 {
   "files": {
-    "main.js": "/static/js/main.000d8144.js",
-    "index.html": "/index.html",
-    "main.000d8144.js.map": "/static/js/main.000d8144.js.map"
+    "main.js": "/RoyalWin786/static/js/main.000d8144.js",
+    "index.html": "/RoyalWin786/index.html",
+    "main.000d8144.js.map": "/RoyalWin786/static/js/main.000d8144.js.map"
   },
   "entrypoints": [
     "static/js/main.000d8144.js"
