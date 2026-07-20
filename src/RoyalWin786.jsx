@@ -42,7 +42,6 @@ const s = {
   logoutBtn: { background:"none", border:`1px solid ${ROYAL_BORDER}`, borderRadius:8, color:"#8070a0", padding:"5px 14px", fontSize:12, cursor:"pointer" },
 };
 
-// Simple local storage auth
 function getUsers() {
   try { return JSON.parse(localStorage.getItem("rw786_users") || "{}"); } catch { return {}; }
 }
@@ -60,19 +59,19 @@ function AuthScreen({ onLogin }) {
 
   const submit = () => {
     setMsg(null);
-    if (!user.trim() || !pass.trim()) return setMsg({ type:"error", text:"Username aur password dono bharein!" });
+    if (!user.trim() || !pass.trim()) return setMsg({ type:"error", text:"Please enter username and password!" });
     const users = getUsers();
     if (mode === "signup") {
-      if (users[user]) return setMsg({ type:"error", text:"Yeh username already le liya gaya hai!" });
-      if (pass.length < 6) return setMsg({ type:"error", text:"Password kam se kam 6 characters ka hona chahiye!" });
+      if (users[user]) return setMsg({ type:"error", text:"This username is already taken!" });
+      if (pass.length < 6) return setMsg({ type:"error", text:"Password must be at least 6 characters!" });
       users[user] = { pass, name: name || user, coins: 1000 };
       saveUsers(users);
       saveSession(user);
-      setMsg({ type:"success", text:"Account ban gaya! Welcome to RoyalWin786!" });
+      setMsg({ type:"success", text:"Account created! Welcome to RoyalWin786!" });
       setTimeout(() => onLogin(user, users[user]), 800);
     } else {
-      if (!users[user]) return setMsg({ type:"error", text:"Username nahi mila!" });
-      if (users[user].pass !== pass) return setMsg({ type:"error", text:"Password galat hai!" });
+      if (!users[user]) return setMsg({ type:"error", text:"Username not found!" });
+      if (users[user].pass !== pass) return setMsg({ type:"error", text:"Incorrect password!" });
       saveSession(user);
       onLogin(user, users[user]);
     }
@@ -85,25 +84,25 @@ function AuthScreen({ onLogin }) {
         <div style={s.logoSub}>Premium Gaming Experience</div>
         <div style={{ height:28 }} />
         <div style={{ fontSize:18, fontWeight:700, color:GOLD, textAlign:"center", marginBottom:20 }}>
-          {mode === "login" ? "Login Karo" : "Account Banao"}
+          {mode === "login" ? "Welcome Back" : "Create Account"}
         </div>
         {msg && <div style={msg.type==="error" ? s.error : s.success}>{msg.text}</div>}
         {mode === "signup" && (
           <>
-            <label style={s.label}>Aapka Naam</label>
-            <input style={s.input} placeholder="Jaise: Rahul Kumar" value={name} onChange={e => setName(e.target.value)} />
+            <label style={s.label}>Full Name</label>
+            <input style={s.input} placeholder="e.g. John Smith" value={name} onChange={e => setName(e.target.value)} />
           </>
         )}
         <label style={s.label}>Username</label>
-        <input style={s.input} placeholder="Username" value={user} onChange={e => setUser(e.target.value)} />
+        <input style={s.input} placeholder="Enter username" value={user} onChange={e => setUser(e.target.value)} />
         <label style={s.label}>Password</label>
-        <input style={s.input} placeholder="Password" type="password" value={pass} onChange={e => setPass(e.target.value)}
+        <input style={s.input} placeholder="Enter password" type="password" value={pass} onChange={e => setPass(e.target.value)}
           onKeyDown={e => e.key === "Enter" && submit()} />
         <button style={s.goldBtn} onClick={submit}>
-          {mode === "login" ? "✦ Login" : "✦ Account Banao"}
+          {mode === "login" ? "✦ Login" : "✦ Create Account"}
         </button>
         <button style={s.linkBtn} onClick={() => { setMode(mode==="login"?"signup":"login"); setMsg(null); }}>
-          {mode === "login" ? "Naya account banana hai? Sign Up karo" : "Pehle se account hai? Login karo"}
+          {mode === "login" ? "Don't have an account? Sign Up" : "Already have an account? Login"}
         </button>
       </div>
     </div>
@@ -191,7 +190,7 @@ function LotteryPanel({ coins, setCoins }) {
     <div style={s.panel}>
       <div style={{height:16}}/>
       <div style={s.card}>
-        <div style={s.cardTitle}>5 Numbers Chuniye (1–30)</div>
+        <div style={s.cardTitle}>Pick 5 Numbers (1–30)</div>
         <div style={s.numGrid}>
           {Array.from({length:30},(_,i)=>i+1).map(n => (
             <button key={n} style={s.numBtn(selected.includes(n))} onClick={()=>toggle(n)}>{n}</button>
@@ -199,21 +198,21 @@ function LotteryPanel({ coins, setCoins }) {
         </div>
         <div style={s.selRow}>
           {selected.length === 0
-            ? <span style={{color:"#6050a0",fontSize:13}}>Koi number nahi chuna...</span>
+            ? <span style={{color:"#6050a0",fontSize:13}}>No numbers selected...</span>
             : selected.slice().sort((a,b)=>a-b).map(n=><span key={n} style={s.selPill}>{n}</span>)}
         </div>
-        <button style={s.actionBtn("gold")} disabled={selected.length<5||coins<50} onClick={buy}>✦ Ticket Kharido — 50 Coins</button>
+        <button style={s.actionBtn("gold")} disabled={selected.length<5||coins<50} onClick={buy}>✦ Buy Ticket — 50 Coins</button>
       </div>
       {tickets.length > 0 && (
         <div style={s.card}>
-          <div style={s.cardTitle}>Meri Tickets</div>
+          <div style={s.cardTitle}>My Tickets</div>
           {tickets.map(t => (
             <div key={t.id} style={s.ticketRow}>
               <div>{t.nums.map(n=><span key={n} style={s.tPill}>{n}</span>)}</div>
               <span style={{fontSize:11,color:"#6050a0"}}>#{String(t.id).padStart(3,"0")}</span>
             </div>
           ))}
-          {!result && <button style={{...s.actionBtn("red"),marginTop:12}} onClick={draw}>◆ Lucky Draw Chalao!</button>}
+          {!result && <button style={{...s.actionBtn("red"),marginTop:12}} onClick={draw}>◆ Run Lucky Draw!</button>}
         </div>
       )}
       {result && (
@@ -223,9 +222,9 @@ function LotteryPanel({ coins, setCoins }) {
             {result.winning.map(n=><span key={n} style={s.winPill}>{n}</span>)}
           </div>
           {result.winners.length > 0
-            ? <div style={{textAlign:"center"}}><div style={{fontSize:22,fontWeight:800,color:GOLD,marginBottom:4}}>Jackpot!</div><div style={{color:"#5ddb8a",fontSize:14}}>+500 Coins jeete!</div></div>
-            : <div style={{textAlign:"center",color:"#8070a0",fontSize:14}}>Is baar kismat ne saath nahi diya!</div>}
-          <button style={{...s.actionBtn(""),marginTop:16}} onClick={()=>{setTickets([]);setSelected([]);setResult(null);}}>Naya Game</button>
+            ? <div style={{textAlign:"center"}}><div style={{fontSize:22,fontWeight:800,color:GOLD,marginBottom:4}}>🏆 Jackpot!</div><div style={{color:"#5ddb8a",fontSize:14}}>You won +500 Coins!</div></div>
+            : <div style={{textAlign:"center",color:"#8070a0",fontSize:14}}>Better luck next time!</div>}
+          <button style={{...s.actionBtn(""),marginTop:16}} onClick={()=>{setTickets([]);setSelected([]);setResult(null);}}>Play Again</button>
         </div>
       )}
     </div>
@@ -270,13 +269,13 @@ function RoulettePanel({ coins, setCoins }) {
           <div style={{textAlign:"center",marginTop:14}}>
             <span style={{fontSize:32,fontWeight:900,color:spinResult.color==="red"?"#e87070":spinResult.color==="green"?"#5ddb8a":"#c0b0e0"}}>{spinResult.num}</span>
             <div style={{fontSize:15,fontWeight:700,marginTop:4,color:spinResult.win?"#5ddb8a":"#e87070"}}>
-              {spinResult.win ? `Jeet gaye! +${spinResult.prize} Coins` : `Haar gaye! -${bet} Coins`}
+              {spinResult.win ? `You won! +${spinResult.prize} Coins` : `You lost! -${bet} Coins`}
             </div>
           </div>
         )}
       </div>
       <div style={s.card}>
-        <div style={s.cardTitle}>Bet Lagao</div>
+        <div style={s.cardTitle}>Place Your Bet</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
           {[10,50,100,200].map((v,i)=>(
             <button key={v} style={s.betChip(["#378ADD","#1D9E75",GOLD,"#D85A30"][i])} onClick={()=>setBet(b=>Math.min(b+v,coins))}>+{v}</button>
@@ -294,11 +293,11 @@ function RoulettePanel({ coins, setCoins }) {
           <option value="number">Exact Number (35x)</option>
         </select>
         {betType==="number" && <input type="number" min={0} max={36} value={exactNum} onChange={e=>setExactNum(parseInt(e.target.value))} style={{width:"100%",padding:"9px 12px",borderRadius:8,marginBottom:10,background:ROYAL_MID,border:`1px solid ${ROYAL_BORDER}`,color:"#e0d0f0",fontSize:13,outline:"none"}} />}
-        <button style={s.actionBtn("gold")} onClick={spin} disabled={spinning||bet===0}>{spinning?"Spinning...":"◈ Spin Karo!"}</button>
+        <button style={s.actionBtn("gold")} onClick={spin} disabled={spinning||bet===0}>{spinning?"Spinning...":"◈ Spin Now!"}</button>
       </div>
       {history.length > 0 && (
         <div style={s.card}>
-          <div style={s.cardTitle}>Pichle Results</div>
+          <div style={s.cardTitle}>Recent Results</div>
           <div style={{display:"flex",flexWrap:"wrap"}}>{history.map((h,i)=><span key={i} style={s.histPill(h.color)}>{h.num}</span>)}</div>
         </div>
       )}
@@ -338,7 +337,7 @@ export default function RoyalWin786() {
   return (
     <div style={s.app}>
       <div style={s.userBar}>
-        <span style={{fontSize:13,color:"#a090c0"}}>Namaste, <span style={{color:GOLD,fontWeight:700}}>{userData.name || user}</span></span>
+        <span style={{fontSize:13,color:"#a090c0"}}>Welcome, <span style={{color:GOLD,fontWeight:700}}>{userData.name || user}</span></span>
         <button style={s.logoutBtn} onClick={logout}>Logout</button>
       </div>
       <div style={s.header}>
