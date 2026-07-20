@@ -8,6 +8,8 @@ const ROYAL_MID = "#160D2E";
 const ROYAL_CARD = "#1C1035";
 const ROYAL_BORDER = "#2E1F5E";
 const RED_NUMS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+const ADMIN_USER = "admin786";
+const ADMIN_PASS = "royal@admin786";
 
 const s = {
   app: { minHeight:"100vh", background:`radial-gradient(ellipse at 20% 0%, #1a0a3a 0%, ${ROYAL_DARK} 60%)`, fontFamily:"'Segoe UI', system-ui, sans-serif", color:"#e8e0f0", paddingBottom:40 },
@@ -40,15 +42,158 @@ const s = {
   histPill: (c) => ({ borderRadius:6, padding:"3px 9px", fontSize:12, fontWeight:700, background:c==="red"?"#3a100a":c==="green"?"#0a2a12":"#1a1a2e", color:c==="red"?"#e87070":c==="green"?"#5ddb8a":"#a090c0", border:`1px solid ${c==="red"?"#6b1a1a":c==="green"?"#1a6b3a":ROYAL_BORDER}`, marginRight:5, marginBottom:5, display:"inline-block" }),
   userBar: { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 20px", background:"rgba(0,0,0,0.2)", borderBottom:`1px solid ${ROYAL_BORDER}` },
   logoutBtn: { background:"none", border:`1px solid ${ROYAL_BORDER}`, borderRadius:8, color:"#8070a0", padding:"5px 14px", fontSize:12, cursor:"pointer" },
+  adminPanel: { minHeight:"100vh", background:`radial-gradient(ellipse at 20% 0%, #1a0a3a 0%, ${ROYAL_DARK} 60%)`, fontFamily:"'Segoe UI', system-ui, sans-serif", color:"#e8e0f0", paddingBottom:40 },
+  adminHeader: { background:`linear-gradient(135deg, #1a0030 0%, #0d0020 100%)`, borderBottom:`1px solid #4a1060`, padding:"16px 24px", display:"flex", alignItems:"center", justifyContent:"space-between" },
+  adminCard: { background:`linear-gradient(135deg, ${ROYAL_CARD} 0%, #170e30 100%)`, border:`1px solid ${ROYAL_BORDER}`, borderRadius:16, padding:"20px", marginBottom:14 },
+  adminTable: { width:"100%", borderCollapse:"collapse" },
+  th: { textAlign:"left", fontSize:11, fontWeight:700, letterSpacing:2, color:GOLD, opacity:0.7, textTransform:"uppercase", padding:"8px 12px", borderBottom:`1px solid ${ROYAL_BORDER}` },
+  td: { padding:"10px 12px", borderBottom:`1px solid rgba(46,31,94,0.5)`, fontSize:13, verticalAlign:"middle" },
+  smInput: { padding:"6px 10px", borderRadius:8, border:`1px solid ${ROYAL_BORDER}`, background:"rgba(0,0,0,0.3)", color:"#e8e0f0", fontSize:13, outline:"none", width:80 },
+  smBtn: (v) => ({ padding:"5px 12px", borderRadius:7, border:`1px solid ${v==="green"?"#1a6b3a":v==="red"?"#6b1a1a":v==="gold"?GOLD_DARK:ROYAL_BORDER}`, background:v==="green"?"#0d3a1e":v==="red"?"#3a0d0d":v==="gold"?`linear-gradient(135deg,${GOLD_DARK},${GOLD})`:"transparent", color:v==="gold"?"#0D0A1A":v==="green"?"#5ddb8a":v==="red"?"#e87070":"#8070a0", fontWeight:700, fontSize:12, cursor:"pointer", marginLeft:4 }),
+  statBox: { background:"rgba(0,0,0,0.2)", border:`1px solid ${ROYAL_BORDER}`, borderRadius:12, padding:"16px 20px", textAlign:"center" },
 };
 
-function getUsers() {
-  try { return JSON.parse(localStorage.getItem("rw786_users") || "{}"); } catch { return {}; }
-}
+function getUsers() { try { return JSON.parse(localStorage.getItem("rw786_users") || "{}"); } catch { return {}; } }
 function saveUsers(u) { localStorage.setItem("rw786_users", JSON.stringify(u)); }
 function getSession() { return localStorage.getItem("rw786_session") || null; }
 function saveSession(u) { localStorage.setItem("rw786_session", u); }
 function clearSession() { localStorage.removeItem("rw786_session"); }
+
+function AdminPanel({ onLogout }) {
+  const [users, setUsers] = useState({});
+  const [coinInputs, setCoinInputs] = useState({});
+  const [msg, setMsg] = useState(null);
+  const [search, setSearch] = useState("");
+
+  const refresh = () => setUsers(getUsers());
+
+  useEffect(() => { refresh(); }, []);
+
+  const showMsg = (text, type="success") => {
+    setMsg({ text, type });
+    setTimeout(() => setMsg(null), 2500);
+  };
+
+  const addCoins = (username) => {
+    const amt = parseInt(coinInputs[username] || 0);
+    if (!amt || isNaN(amt)) return showMsg("Enter a valid coin amount!", "error");
+    const u = getUsers();
+    u[username].coins = (u[username].coins || 0) + amt;
+    saveUsers(u);
+    setCoinInputs(prev => ({ ...prev, [username]: "" }));
+    refresh();
+    showMsg(`+${amt} coins added to ${username}`);
+  };
+
+  const removeCoins = (username) => {
+    const amt = parseInt(coinInputs[username] || 0);
+    if (!amt || isNaN(amt)) return showMsg("Enter a valid coin amount!", "error");
+    const u = getUsers();
+    u[username].coins = Math.max(0, (u[username].coins || 0) - amt);
+    saveUsers(u);
+    setCoinInputs(prev => ({ ...prev, [username]: "" }));
+    refresh();
+    showMsg(`-${amt} coins removed from ${username}`);
+  };
+
+  const banUser = (username) => {
+    if (!window.confirm(`Ban user "${username}"? This will delete their account.`)) return;
+    const u = getUsers();
+    delete u[username];
+    saveUsers(u);
+    refresh();
+    showMsg(`User "${username}" has been banned.`);
+  };
+
+  const totalUsers = Object.keys(users).length;
+  const totalCoins = Object.values(users).reduce((s, u) => s + (u.coins || 0), 0);
+  const filtered = Object.entries(users).filter(([k]) => k.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div style={s.adminPanel}>
+      <div style={s.adminHeader}>
+        <div>
+          <div style={{ fontSize:20, fontWeight:800, background:`linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD})`, WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
+            ⚙ ROYALWIN786 — Admin Panel
+          </div>
+          <div style={{ fontSize:11, color:"#8060a0", letterSpacing:2, marginTop:2 }}>SUPER ADMIN ACCESS</div>
+        </div>
+        <button style={s.logoutBtn} onClick={onLogout}>Logout</button>
+      </div>
+
+      <div style={{ maxWidth:900, margin:"0 auto", padding:"24px 16px" }}>
+        {msg && <div style={msg.type==="error" ? s.error : s.success}>{msg.text}</div>}
+
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12, marginBottom:20 }}>
+          <div style={s.statBox}>
+            <div style={{ fontSize:28, fontWeight:800, color:GOLD }}>{totalUsers}</div>
+            <div style={{ fontSize:11, color:"#8070a0", letterSpacing:2, marginTop:4 }}>TOTAL USERS</div>
+          </div>
+          <div style={s.statBox}>
+            <div style={{ fontSize:28, fontWeight:800, color:"#5ddb8a" }}>{totalCoins.toLocaleString()}</div>
+            <div style={{ fontSize:11, color:"#8070a0", letterSpacing:2, marginTop:4 }}>TOTAL COINS</div>
+          </div>
+          <div style={s.statBox}>
+            <div style={{ fontSize:28, fontWeight:800, color:"#378ADD" }}>{totalUsers > 0 ? Math.round(totalCoins/totalUsers).toLocaleString() : 0}</div>
+            <div style={{ fontSize:11, color:"#8070a0", letterSpacing:2, marginTop:4 }}>AVG COINS/USER</div>
+          </div>
+        </div>
+
+        <div style={s.adminCard}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+            <div style={s.cardTitle}>All Users</div>
+            <input
+              style={{ ...s.smInput, width:180 }}
+              placeholder="Search username..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          {filtered.length === 0 ? (
+            <div style={{ color:"#6050a0", fontSize:13, textAlign:"center", padding:"20px 0" }}>No users found.</div>
+          ) : (
+            <div style={{ overflowX:"auto" }}>
+              <table style={s.adminTable}>
+                <thead>
+                  <tr>
+                    <th style={s.th}>Username</th>
+                    <th style={s.th}>Name</th>
+                    <th style={s.th}>Coins</th>
+                    <th style={s.th}>Manage Coins</th>
+                    <th style={s.th}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(([username, data]) => (
+                    <tr key={username}>
+                      <td style={s.td}><span style={{ color:GOLD, fontWeight:700 }}>{username}</span></td>
+                      <td style={s.td}><span style={{ color:"#c0b0e0" }}>{data.name || "—"}</span></td>
+                      <td style={s.td}><span style={{ color:"#5ddb8a", fontWeight:700 }}>{(data.coins||0).toLocaleString()}</span></td>
+                      <td style={s.td}>
+                        <input
+                          style={s.smInput}
+                          type="number"
+                          placeholder="Amount"
+                          value={coinInputs[username] || ""}
+                          onChange={e => setCoinInputs(prev => ({ ...prev, [username]: e.target.value }))}
+                        />
+                        <button style={s.smBtn("green")} onClick={() => addCoins(username)}>+Add</button>
+                        <button style={s.smBtn("red")} onClick={() => removeCoins(username)}>−Remove</button>
+                      </td>
+                      <td style={s.td}>
+                        <button style={s.smBtn("red")} onClick={() => banUser(username)}>🚫 Ban</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AuthScreen({ onLogin }) {
   const [mode, setMode] = useState("login");
@@ -60,8 +205,14 @@ function AuthScreen({ onLogin }) {
   const submit = () => {
     setMsg(null);
     if (!user.trim() || !pass.trim()) return setMsg({ type:"error", text:"Please enter username and password!" });
+    if (user === ADMIN_USER && pass === ADMIN_PASS) {
+      saveSession("__admin__");
+      onLogin("__admin__", { name:"Admin", coins:0, isAdmin:true });
+      return;
+    }
     const users = getUsers();
     if (mode === "signup") {
+      if (user === ADMIN_USER) return setMsg({ type:"error", text:"This username is reserved!" });
       if (users[user]) return setMsg({ type:"error", text:"This username is already taken!" });
       if (pass.length < 6) return setMsg({ type:"error", text:"Password must be at least 6 characters!" });
       users[user] = { pass, name: name || user, coins: 1000 };
@@ -112,52 +263,32 @@ function AuthScreen({ onLogin }) {
 function RouletteWheel({ spinning, result, onSpinComplete }) {
   const canvasRef = useRef(null);
   const angleRef = useRef(0);
-
   const draw = useCallback((angle) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext("2d");
     const cx = 140, cy = 140, r = 132, inner = 42;
     const slots = 37, slice = (2 * Math.PI) / slots;
     ctx.clearRect(0, 0, 280, 280);
-    ctx.beginPath(); ctx.arc(cx, cy, r + 6, 0, 2 * Math.PI);
-    ctx.fillStyle = "#1a0838"; ctx.fill();
-    ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, r + 6, 0, 2 * Math.PI); ctx.fillStyle = "#1a0838"; ctx.fill(); ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.stroke();
     for (let i = 0; i < slots; i++) {
-      const start = angle + i * slice;
-      const isRed = RED_NUMS.has(i), isGreen = i === 0;
+      const start = angle + i * slice, isRed = RED_NUMS.has(i), isGreen = i === 0;
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, start, start + slice); ctx.closePath();
-      ctx.fillStyle = isGreen ? "#0d3a1e" : isRed ? "#3a0d0d" : "#0d0a1a"; ctx.fill();
-      ctx.strokeStyle = GOLD_DARK; ctx.lineWidth = 0.5; ctx.stroke();
-      ctx.save(); ctx.translate(cx, cy); ctx.rotate(start + slice / 2);
-      ctx.textAlign = "right"; ctx.fillStyle = isGreen ? "#5ddb8a" : isRed ? "#e87070" : "#a090c0";
-      ctx.font = "bold 10px 'Segoe UI', sans-serif"; ctx.fillText(i, r - 8, 4); ctx.restore();
+      ctx.fillStyle = isGreen ? "#0d3a1e" : isRed ? "#3a0d0d" : "#0d0a1a"; ctx.fill(); ctx.strokeStyle = GOLD_DARK; ctx.lineWidth = 0.5; ctx.stroke();
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(start + slice / 2); ctx.textAlign = "right";
+      ctx.fillStyle = isGreen ? "#5ddb8a" : isRed ? "#e87070" : "#a090c0"; ctx.font = "bold 10px 'Segoe UI', sans-serif"; ctx.fillText(i, r - 8, 4); ctx.restore();
     }
-    ctx.beginPath(); ctx.arc(cx, cy, inner, 0, 2 * Math.PI);
-    ctx.fillStyle = ROYAL_MID; ctx.fill(); ctx.strokeStyle = GOLD; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, inner, 0, 2 * Math.PI); ctx.fillStyle = ROYAL_MID; ctx.fill(); ctx.strokeStyle = GOLD; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillStyle = GOLD; ctx.textAlign = "center"; ctx.fillText("786", cx, cy + 5);
-    ctx.beginPath(); ctx.moveTo(cx, cy - r - 2); ctx.lineTo(cx - 9, cy - r + 16); ctx.lineTo(cx + 9, cy - r + 16); ctx.closePath();
-    ctx.fillStyle = "#e84444"; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx, cy - r - 2); ctx.lineTo(cx - 9, cy - r + 16); ctx.lineTo(cx + 9, cy - r + 16); ctx.closePath(); ctx.fillStyle = "#e84444"; ctx.fill();
   }, []);
-
   useEffect(() => { draw(angleRef.current); }, [draw]);
-
   useEffect(() => {
     if (!spinning) return;
-    const slots = 37, slice = (2 * Math.PI) / slots;
-    const totalRot = Math.PI * 2 * (10 + Math.random() * 6);
-    const target = totalRot + (result * slice);
-    const duration = 4500, start = performance.now(), startAngle = angleRef.current;
+    const slots = 37, slice = (2 * Math.PI) / slots, totalRot = Math.PI * 2 * (10 + Math.random() * 6), target = totalRot + (result * slice), duration = 4500, start = performance.now(), startAngle = angleRef.current;
     function easeOut(t) { return 1 - Math.pow(1 - t, 4); }
-    function frame(now) {
-      const t = Math.min((now - start) / duration, 1);
-      angleRef.current = startAngle + target * easeOut(t);
-      draw(angleRef.current);
-      if (t < 1) requestAnimationFrame(frame); else onSpinComplete();
-    }
+    function frame(now) { const t = Math.min((now - start) / duration, 1); angleRef.current = startAngle + target * easeOut(t); draw(angleRef.current); if (t < 1) requestAnimationFrame(frame); else onSpinComplete(); }
     requestAnimationFrame(frame);
   }, [spinning, result, draw, onSpinComplete]);
-
   return <canvas ref={canvasRef} width={280} height={280} style={{ borderRadius:"50%", display:"block", margin:"0 auto" }} />;
 }
 
@@ -166,64 +297,37 @@ function LotteryPanel({ coins, setCoins }) {
   const [tickets, setTickets] = useState([]);
   const [ticketId, setTicketId] = useState(1);
   const [result, setResult] = useState(null);
-
   const toggle = (n) => setSelected(prev => prev.includes(n) ? prev.filter(x => x !== n) : prev.length < 5 ? [...prev, n] : prev);
-
-  const buy = () => {
-    if (selected.length < 5 || coins < 50) return;
-    setCoins(c => c - 50);
-    setTickets(prev => [...prev, { id: ticketId, nums: [...selected].sort((a,b)=>a-b) }]);
-    setTicketId(i => i + 1); setSelected([]);
-  };
-
+  const buy = () => { if (selected.length < 5 || coins < 50) return; setCoins(c => c - 50); setTickets(prev => [...prev, { id: ticketId, nums: [...selected].sort((a,b)=>a-b) }]); setTicketId(i => i + 1); setSelected([]); };
   const draw = () => {
-    const pool = Array.from({length:30},(_,i)=>i+1);
-    const winning = [];
+    const pool = Array.from({length:30},(_,i)=>i+1), winning = [];
     while (winning.length < 5) { const idx = Math.floor(Math.random()*pool.length); winning.push(pool.splice(idx,1)[0]); }
     winning.sort((a,b)=>a-b);
     const winners = tickets.filter(t => t.nums.every(n => winning.includes(n)));
     if (winners.length > 0) setCoins(c => c + 500);
     setResult({ winning, winners });
   };
-
   return (
     <div style={s.panel}>
       <div style={{height:16}}/>
       <div style={s.card}>
         <div style={s.cardTitle}>Pick 5 Numbers (1–30)</div>
-        <div style={s.numGrid}>
-          {Array.from({length:30},(_,i)=>i+1).map(n => (
-            <button key={n} style={s.numBtn(selected.includes(n))} onClick={()=>toggle(n)}>{n}</button>
-          ))}
-        </div>
-        <div style={s.selRow}>
-          {selected.length === 0
-            ? <span style={{color:"#6050a0",fontSize:13}}>No numbers selected...</span>
-            : selected.slice().sort((a,b)=>a-b).map(n=><span key={n} style={s.selPill}>{n}</span>)}
-        </div>
+        <div style={s.numGrid}>{Array.from({length:30},(_,i)=>i+1).map(n => <button key={n} style={s.numBtn(selected.includes(n))} onClick={()=>toggle(n)}>{n}</button>)}</div>
+        <div style={s.selRow}>{selected.length === 0 ? <span style={{color:"#6050a0",fontSize:13}}>No numbers selected...</span> : selected.slice().sort((a,b)=>a-b).map(n=><span key={n} style={s.selPill}>{n}</span>)}</div>
         <button style={s.actionBtn("gold")} disabled={selected.length<5||coins<50} onClick={buy}>✦ Buy Ticket — 50 Coins</button>
       </div>
       {tickets.length > 0 && (
         <div style={s.card}>
           <div style={s.cardTitle}>My Tickets</div>
-          {tickets.map(t => (
-            <div key={t.id} style={s.ticketRow}>
-              <div>{t.nums.map(n=><span key={n} style={s.tPill}>{n}</span>)}</div>
-              <span style={{fontSize:11,color:"#6050a0"}}>#{String(t.id).padStart(3,"0")}</span>
-            </div>
-          ))}
+          {tickets.map(t => (<div key={t.id} style={s.ticketRow}><div>{t.nums.map(n=><span key={n} style={s.tPill}>{n}</span>)}</div><span style={{fontSize:11,color:"#6050a0"}}>#{String(t.id).padStart(3,"0")}</span></div>))}
           {!result && <button style={{...s.actionBtn("red"),marginTop:12}} onClick={draw}>◆ Run Lucky Draw!</button>}
         </div>
       )}
       {result && (
         <div style={s.card}>
           <div style={s.cardTitle}>Winning Numbers</div>
-          <div style={{display:"flex",flexWrap:"wrap",marginBottom:16}}>
-            {result.winning.map(n=><span key={n} style={s.winPill}>{n}</span>)}
-          </div>
-          {result.winners.length > 0
-            ? <div style={{textAlign:"center"}}><div style={{fontSize:22,fontWeight:800,color:GOLD,marginBottom:4}}>🏆 Jackpot!</div><div style={{color:"#5ddb8a",fontSize:14}}>You won +500 Coins!</div></div>
-            : <div style={{textAlign:"center",color:"#8070a0",fontSize:14}}>Better luck next time!</div>}
+          <div style={{display:"flex",flexWrap:"wrap",marginBottom:16}}>{result.winning.map(n=><span key={n} style={s.winPill}>{n}</span>)}</div>
+          {result.winners.length > 0 ? <div style={{textAlign:"center"}}><div style={{fontSize:22,fontWeight:800,color:GOLD,marginBottom:4}}>🏆 Jackpot!</div><div style={{color:"#5ddb8a",fontSize:14}}>You won +500 Coins!</div></div> : <div style={{textAlign:"center",color:"#8070a0",fontSize:14}}>Better luck next time!</div>}
           <button style={{...s.actionBtn(""),marginTop:16}} onClick={()=>{setTickets([]);setSelected([]);setResult(null);}}>Play Again</button>
         </div>
       )}
@@ -239,16 +343,8 @@ function RoulettePanel({ coins, setCoins }) {
   const [spinResult, setSpinResult] = useState(null);
   const [resultNum, setResultNum] = useState(0);
   const [history, setHistory] = useState([]);
-
   const getColor = (n) => n === 0 ? "green" : RED_NUMS.has(n) ? "red" : "black";
-
-  const spin = () => {
-    if (bet === 0 || spinning || bet > coins) return;
-    setCoins(c => c - bet);
-    const num = Math.floor(Math.random() * 37);
-    setResultNum(num); setSpinResult(null); setSpinning(true);
-  };
-
+  const spin = () => { if (bet === 0 || spinning || bet > coins) return; setCoins(c => c - bet); const num = Math.floor(Math.random() * 37); setResultNum(num); setSpinResult(null); setSpinning(true); };
   const onSpinComplete = useCallback(() => {
     setSpinning(false);
     const num = resultNum, color = getColor(num);
@@ -258,49 +354,28 @@ function RoulettePanel({ coins, setCoins }) {
     setSpinResult({ num, color, win, prize });
     setHistory(h => [{num,color},...h].slice(0,14));
   }, [resultNum, betType, exactNum, bet, setCoins]);
-
   return (
     <div style={s.panel}>
       <div style={{height:16}}/>
       <div style={s.card}>
         <div style={s.cardTitle}>Roulette Wheel</div>
         <RouletteWheel spinning={spinning} result={resultNum} onSpinComplete={onSpinComplete} />
-        {spinResult && (
-          <div style={{textAlign:"center",marginTop:14}}>
-            <span style={{fontSize:32,fontWeight:900,color:spinResult.color==="red"?"#e87070":spinResult.color==="green"?"#5ddb8a":"#c0b0e0"}}>{spinResult.num}</span>
-            <div style={{fontSize:15,fontWeight:700,marginTop:4,color:spinResult.win?"#5ddb8a":"#e87070"}}>
-              {spinResult.win ? `You won! +${spinResult.prize} Coins` : `You lost! -${bet} Coins`}
-            </div>
-          </div>
-        )}
+        {spinResult && (<div style={{textAlign:"center",marginTop:14}}><span style={{fontSize:32,fontWeight:900,color:spinResult.color==="red"?"#e87070":spinResult.color==="green"?"#5ddb8a":"#c0b0e0"}}>{spinResult.num}</span><div style={{fontSize:15,fontWeight:700,marginTop:4,color:spinResult.win?"#5ddb8a":"#e87070"}}>{spinResult.win?`You won! +${spinResult.prize} Coins`:`You lost! -${bet} Coins`}</div></div>)}
       </div>
       <div style={s.card}>
         <div style={s.cardTitle}>Place Your Bet</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
-          {[10,50,100,200].map((v,i)=>(
-            <button key={v} style={s.betChip(["#378ADD","#1D9E75",GOLD,"#D85A30"][i])} onClick={()=>setBet(b=>Math.min(b+v,coins))}>+{v}</button>
-          ))}
+          {[10,50,100,200].map((v,i)=>(<button key={v} style={s.betChip(["#378ADD","#1D9E75",GOLD,"#D85A30"][i])} onClick={()=>setBet(b=>Math.min(b+v,coins))}>+{v}</button>))}
           <button style={s.betChip("#8070a0")} onClick={()=>setBet(0)}>Clear</button>
         </div>
         <div style={{fontSize:14,color:"#a090c0",marginBottom:12}}>Bet: <span style={{color:GOLD,fontWeight:700}}>{bet} Coins</span></div>
         <select value={betType} onChange={e=>setBetType(e.target.value)} style={{width:"100%",padding:"9px 12px",borderRadius:8,marginBottom:10,background:ROYAL_MID,border:`1px solid ${ROYAL_BORDER}`,color:"#e0d0f0",fontSize:13,outline:"none"}}>
-          <option value="red">Red (2x)</option>
-          <option value="black">Black (2x)</option>
-          <option value="even">Even (2x)</option>
-          <option value="odd">Odd (2x)</option>
-          <option value="low">Low 1–18 (2x)</option>
-          <option value="high">High 19–36 (2x)</option>
-          <option value="number">Exact Number (35x)</option>
+          <option value="red">Red (2x)</option><option value="black">Black (2x)</option><option value="even">Even (2x)</option><option value="odd">Odd (2x)</option><option value="low">Low 1–18 (2x)</option><option value="high">High 19–36 (2x)</option><option value="number">Exact Number (35x)</option>
         </select>
         {betType==="number" && <input type="number" min={0} max={36} value={exactNum} onChange={e=>setExactNum(parseInt(e.target.value))} style={{width:"100%",padding:"9px 12px",borderRadius:8,marginBottom:10,background:ROYAL_MID,border:`1px solid ${ROYAL_BORDER}`,color:"#e0d0f0",fontSize:13,outline:"none"}} />}
         <button style={s.actionBtn("gold")} onClick={spin} disabled={spinning||bet===0}>{spinning?"Spinning...":"◈ Spin Now!"}</button>
       </div>
-      {history.length > 0 && (
-        <div style={s.card}>
-          <div style={s.cardTitle}>Recent Results</div>
-          <div style={{display:"flex",flexWrap:"wrap"}}>{history.map((h,i)=><span key={i} style={s.histPill(h.color)}>{h.num}</span>)}</div>
-        </div>
-      )}
+      {history.length > 0 && (<div style={s.card}><div style={s.cardTitle}>Recent Results</div><div style={{display:"flex",flexWrap:"wrap"}}>{history.map((h,i)=><span key={i} style={s.histPill(h.color)}>{h.num}</span>)}</div></div>)}
     </div>
   );
 }
@@ -312,27 +387,22 @@ export default function RoyalWin786() {
 
   useEffect(() => {
     const sess = getSession();
-    if (sess) {
-      const users = getUsers();
-      if (users[sess]) { setUser(sess); setUserData(users[sess]); }
-    }
+    if (sess === "__admin__") { setUser("__admin__"); setUserData({ name:"Admin", coins:0, isAdmin:true }); return; }
+    if (sess) { const users = getUsers(); if (users[sess]) { setUser(sess); setUserData(users[sess]); } }
   }, []);
 
   const handleLogin = (username, data) => { setUser(username); setUserData(data); };
-
   const setCoins = (fn) => {
     setUserData(prev => {
       const newCoins = typeof fn === "function" ? fn(prev.coins) : fn;
-      const users = getUsers();
-      users[user].coins = newCoins;
-      saveUsers(users);
+      const users = getUsers(); users[user].coins = newCoins; saveUsers(users);
       return { ...prev, coins: newCoins };
     });
   };
-
   const logout = () => { clearSession(); setUser(null); setUserData(null); };
 
   if (!user) return <AuthScreen onLogin={handleLogin} />;
+  if (userData?.isAdmin) return <AdminPanel onLogout={logout} />;
 
   return (
     <div style={s.app}>
@@ -354,9 +424,7 @@ export default function RoyalWin786() {
         <button style={s.tab(tab==="roulette")} onClick={()=>setTab("roulette")}>◈ Roulette</button>
       </div>
       <div style={{maxWidth:552,margin:"0 auto",borderTop:`1px solid ${ROYAL_BORDER}`}}>
-        {tab==="lottery"
-          ? <LotteryPanel coins={userData.coins||0} setCoins={setCoins}/>
-          : <RoulettePanel coins={userData.coins||0} setCoins={setCoins}/>}
+        {tab==="lottery" ? <LotteryPanel coins={userData.coins||0} setCoins={setCoins}/> : <RoulettePanel coins={userData.coins||0} setCoins={setCoins}/>}
       </div>
       <div style={{textAlign:"center",marginTop:24,color:"#4a3a6a",fontSize:11,letterSpacing:2}}>ROYALWIN786 · ENTERTAINMENT ONLY · 18+</div>
     </div>
