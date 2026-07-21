@@ -5,13 +5,15 @@ Original responsive RoyalWin786 player and admin platform built with React. The 
 ## Included flows
 
 - Player-first passwordless email-link login with a separate admin login
-- Separate restricted admin credential login
+- Restricted admin credential login with role enforcement
 - Responsive player lobby with desktop navigation and mobile app tabs
-- RoyalWin Super 7 number picker and demo ticket history
+- RoyalWin Super 7 number picker with transactional ticket purchase
+- Official result history, ticket matching, prize settlement and winner points
+- Player-owned ticket verification and complete ticket history
+- Reward-points wallet ledger and database-enforced daily play limits
+- Live admin control centre for draw creation, opening, cancellation/refunds, result publication and player point adjustments
+- Atomic draw settlement with an immutable audit trail
 - Royal Roulette secondary demo-points game
-- Separate admin draw dashboard and report navigation
-- Stock Unsold number-pad workflow
-- View Order List workflow
 - Original RoyalWin786 premium brand icon
 
 ## Run locally
@@ -29,8 +31,10 @@ The repository includes an optional Supabase PostgreSQL backend scaffold with:
 - Player/admin profiles and role enforcement
 - Draws, lottery tickets, points wallets, immutable ledger entries, responsible-play settings, audit events, and demo roulette history
 - Row Level Security policies for player-owned data and admin-only operations
-- A transactional `purchase_lottery_ticket` database function
+- Transactional ticket purchase with balance and daily-limit checks
+- Admin-only draw lifecycle functions and automatic winner settlement
+- Configurable reward tiers and authenticated ticket verification
 
 Follow [`supabase/README.md`](supabase/README.md), then copy `.env.example` to `.env.local`. Until `REACT_APP_ENABLE_LIVE_BACKEND=true` and valid Supabase values are configured, the interface stays in clearly labelled frontend demo mode.
 
-Payments, cash withdrawal, KYC, production roulette settlement, result publication, regulatory enforcement, and service-role operations must remain in a trusted backend or Edge Function and require the applicable approvals.
+RoyalWin786 currently uses non-cash reward points. Payments, cash withdrawal, KYC, real-money prizes, production roulette settlement, regulatory enforcement, and service-role operations are intentionally not included and require a separately audited, compliant backend.
