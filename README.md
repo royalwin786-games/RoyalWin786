@@ -1,5 +1,20 @@
-# RoyalWin786 🎰
+# RoyalWin786
 
-Premium Gaming App — Lottery + Roulette
+Mobile-first React recreation of the supplied Rajshree Lottery references.
 
-Built with React.
+## Included flows
+
+- Mobile/OTP entry
+- MPIN and biometric login
+- Lottery dashboard and report navigation
+- Stock Unsold number-pad workflow
+- View Order List workflow
+
+## Run locally
+
+```bash
+npm install
+npm start
+```
+
+This implementation reproduces the reference interface and front-end interactions. Production authentication, lottery draws, balances, and stock operations still require a secure backend.
