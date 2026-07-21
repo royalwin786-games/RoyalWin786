@@ -15,6 +15,13 @@ const orderGroups = [
   { name: "ROYALWIN DIAMOND WEEKLY DRAW", code: "RW1223", date: "15/01/2026" },
 ];
 
+const lotteryNumbers = Array.from({ length: 36 }, (_, index) => index + 1);
+const rouletteNumbers = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27];
+const redRouletteNumbers = new Set([32, 19, 21, 25, 34, 27]);
+const initialPlayerTickets = [
+  { id: "RW786-2048", numbers: [4, 7, 12, 18, 24, 31], draw: "RoyalWin Super 7", status: "Upcoming" },
+];
+
 function Icon({ name, size = 24, strokeWidth = 1.8 }) {
   const common = {
     width: size,
@@ -50,6 +57,11 @@ function Icon({ name, size = 24, strokeWidth = 1.8 }) {
     copy: <><rect x="8" y="7" width="10" height="13" rx="2"/><path d="M6 16H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2"/></>,
     home: <><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10M9 20v-6h6v6"/></>,
     shield: <><path d="M12 3 4 6v5c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6z"/><path d="m9 12 2 2 4-5"/></>,
+    user: <><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></>,
+    lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></>,
+    game: <><path d="M8 9h8a5 5 0 0 1 4.8 6.4l-1 3.1a2 2 0 0 1-3.3.8L14 17h-4l-2.5 2.3a2 2 0 0 1-3.3-.8l-1-3.1A5 5 0 0 1 8 9z"/><path d="M8 13v4M6 15h4M16 14h.01M18 16h.01"/></>,
+    wallet: <><path d="M4 6h14a2 2 0 0 1 2 2v11H4a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3h12"/><path d="M15 11h6v5h-6a2.5 2.5 0 0 1 0-5z"/></>,
+    sparkle: <><path d="m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2zM5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8zM18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z"/></>,
   };
 
   return <svg {...common}>{paths[name] || paths.ticket}</svg>;
@@ -75,33 +87,34 @@ function AppFrame({ children, className = "" }) {
 function Brand({ showVersion = false }) {
   return (
     <section className="brand-block">
-      <span className="brand-kicker">Secure partner platform</span>
+      <span className="brand-kicker">India's premium draw experience</span>
       <BrandMark />
       <h1>RoyalWin<span>786</span></h1>
-      <p>Smart draw, stock and ticket management</p>
+      <p>Play the weekly lottery, follow live results and enjoy bonus games.</p>
       <div className="brand-benefits" aria-label="Platform benefits">
-        <span><Icon name="shield" size={18}/>Secure access</span>
-        <span><Icon name="chart" size={18}/>Live insights</span>
-        <span><Icon name="ticket" size={18}/>Fast operations</span>
+        <span><Icon name="shield" size={18}/>Secure player access</span>
+        <span><Icon name="trophy" size={18}/>Weekly lottery</span>
+        <span><Icon name="game" size={18}/>Bonus games</span>
       </div>
       {showVersion && <small>RoyalWin Web &amp; App • v2.0</small>}
     </section>
   );
 }
 
-function OtpLogin({ mobile, setMobile, onContinue, onRegister }) {
+function PlayerLogin({ mobile, setMobile, onContinue, onRegister, onAdmin }) {
   const valid = mobile.replace(/\D/g, "").length === 10;
   return (
-    <AppFrame className="auth-frame">
-      <div className="otp-screen">
+    <AppFrame className="auth-frame player-auth-frame">
+      <div className="otp-screen player-login-screen">
+        <button type="button" className="admin-access-link" onClick={onAdmin}><Icon name="lock" size={16}/>Admin Login</button>
         <Brand />
         <section className="auth-card otp-card">
-          <div className="auth-card-heading"><span>Partner login</span><h2>Welcome back</h2><p>Enter your registered mobile number to continue securely.</p></div>
+          <div className="auth-card-heading"><span>Players &amp; users</span><h2>Play with RoyalWin786</h2><p>Enter your registered mobile number to access lottery tickets, results and games.</p></div>
           <label className="phone-input">
             <strong>+91</strong><span/><input value={mobile} inputMode="numeric" maxLength={10} placeholder="Enter mobile number" onChange={(event) => setMobile(event.target.value.replace(/\D/g, ""))}/>
           </label>
           <button type="button" className="primary-button" disabled={!valid} onClick={onContinue}>Request OTP</button>
-          <button type="button" className="text-button" onClick={onRegister}>New partner? <strong>Create account</strong></button>
+          <button type="button" className="text-button" onClick={onRegister}>New player? <strong>Create account</strong></button>
           <p className="secure-note"><Icon name="shield" size={16}/>Your login is protected with secure verification.</p>
         </section>
       </div>
@@ -109,10 +122,11 @@ function OtpLogin({ mobile, setMobile, onContinue, onRegister }) {
   );
 }
 
-function MpinLogin({ mobile, onLogin }) {
+function PlayerMpinLogin({ mobile, onLogin, onBack }) {
   const [mpin, setMpin] = useState(["", "", "", ""]);
   const refs = useRef([]);
   const [biometric, setBiometric] = useState(false);
+  const valid = mpin.every(Boolean);
 
   const changeDigit = (index, value) => {
     const digit = value.replace(/\D/g, "").slice(-1);
@@ -125,7 +139,8 @@ function MpinLogin({ mobile, onLogin }) {
       <div className="mpin-screen">
         <Brand showVersion />
         <section className="auth-card mpin-card">
-          <div className="auth-card-heading"><span>Secure sign in</span><h2>Hello {mobile || "9769980248"}</h2><p>Choose your preferred login method.</p></div>
+          <button type="button" className="auth-back-link" onClick={onBack}>← Change mobile number</button>
+          <div className="auth-card-heading"><span>Player verification</span><h2>Hello {mobile || "9769980248"}</h2><p>Enter your MPIN to open the RoyalWin786 player lobby.</p></div>
           <div className="login-methods"><button type="button" className="outline-pill">Biometric</button><button type="button" className="solid-pill">MPIN</button></div>
           <label className="mpin-label">Enter MPIN</label>
           <div className="mpin-row">
@@ -134,9 +149,216 @@ function MpinLogin({ mobile, onLogin }) {
           <button type="button" className="forgot-button">Forgot MPIN</button>
           <div className="biometric-row"><strong>Enable Biometric</strong><button type="button" aria-pressed={biometric} aria-label="Enable biometric" className={`toggle ${biometric ? "toggle--on" : ""}`} onClick={() => setBiometric((value) => !value)}><span/></button></div>
         </section>
-        <button type="button" className="login-action" onClick={onLogin}>Login With MPIN</button>
+        <button type="button" className="login-action" disabled={!valid} onClick={onLogin}>Enter Player Lobby</button>
       </div>
     </AppFrame>
+  );
+}
+
+function AdminLogin({ onBack, onLogin }) {
+  const [credentials, setCredentials] = useState({ userId: "", password: "" });
+  const valid = credentials.userId.trim() && credentials.password.trim();
+  const update = (field, value) => setCredentials((current) => ({ ...current, [field]: value }));
+
+  return (
+    <AppFrame className="auth-frame admin-auth-frame">
+      <div className="otp-screen admin-login-screen">
+        <Brand />
+        <form className="auth-card otp-card admin-login-card" onSubmit={(event) => { event.preventDefault(); if (valid) onLogin(); }}>
+          <button type="button" className="auth-back-link" onClick={onBack}>← Back to player login</button>
+          <div className="auth-card-heading"><span>Restricted access</span><h2>Admin Console</h2><p>Use your authorized admin credentials to manage stock, reports and draw operations.</p></div>
+          <label className="credential-input"><span><Icon name="user" size={20}/></span><input value={credentials.userId} autoComplete="username" placeholder="Admin ID or email" onChange={(event) => update("userId", event.target.value)}/></label>
+          <label className="credential-input"><span><Icon name="lock" size={20}/></span><input type="password" value={credentials.password} autoComplete="current-password" placeholder="Password" onChange={(event) => update("password", event.target.value)}/></label>
+          <button type="submit" className="primary-button admin-login-button" disabled={!valid}>Secure Admin Login</button>
+          <p className="secure-note"><Icon name="shield" size={16}/>Credentials must be validated by your secure backend before production launch.</p>
+        </form>
+      </div>
+    </AppFrame>
+  );
+}
+
+function PlayerHeader({ active, onNavigate, onLogout }) {
+  const items = [
+    { label: "Lobby", icon: "home", screen: "player-dashboard" },
+    { label: "Lottery", icon: "ticket", screen: "player-lottery" },
+    { label: "My Tickets", icon: "document", screen: "player-tickets" },
+    { label: "Roulette", icon: "game", screen: "player-roulette" },
+  ];
+  return (
+    <header className="app-header player-header">
+      <button type="button" className="header-brand header-brand-button" onClick={() => onNavigate("player-dashboard")}><BrandMark compact/><span><strong>RoyalWin786</strong><small>Player Hub</small></span></button>
+      <nav className="desktop-nav" aria-label="Player navigation">
+        {items.map((item) => <button type="button" key={item.screen} className={active === item.screen ? "active" : ""} onClick={() => onNavigate(item.screen)}><Icon name={item.icon} size={18}/>{item.label}</button>)}
+      </nav>
+      <button type="button" className="icon-button logout-button" aria-label="Logout" onClick={onLogout}><Icon name="logout" size={24}/><span>Logout</span></button>
+    </header>
+  );
+}
+
+function PlayerBottomMenu({ active, onNavigate }) {
+  const items = [
+    { label: "Home", icon: "home", screen: "player-dashboard" },
+    { label: "Lottery", icon: "ticket", screen: "player-lottery" },
+    { label: "Roulette", icon: "game", screen: "player-roulette" },
+    { label: "Tickets", icon: "document", screen: "player-tickets" },
+  ];
+  return (
+    <nav className="bottom-menu player-bottom-menu" aria-label="Player navigation">
+      {items.map((item) => <button type="button" key={item.screen} className={active === item.screen ? "active" : ""} onClick={() => onNavigate(item.screen)}><span><Icon name={item.icon} size={25}/></span><small>{item.label}</small></button>)}
+    </nav>
+  );
+}
+
+function PlayerLayout({ active, onNavigate, onLogout, children, className = "" }) {
+  return (
+    <AppFrame className={`dashboard-frame player-frame ${className}`}>
+      <div className="player-screen">
+        <PlayerHeader active={active} onNavigate={onNavigate} onLogout={onLogout}/>
+        <div className="player-content">{children}</div>
+        <PlayerBottomMenu active={active} onNavigate={onNavigate}/>
+      </div>
+    </AppFrame>
+  );
+}
+
+function PlayerDashboard({ tickets, onNavigate, onLogout }) {
+  const latestTicket = tickets[0];
+  return (
+    <PlayerLayout active="player-dashboard" onNavigate={onNavigate} onLogout={onLogout}>
+      <div className="player-welcome"><div><span>PLAYER LOBBY</span><h1>Good afternoon, Rahul</h1><p>Your next RoyalWin chance is ready.</p></div><div className="player-points"><Icon name="wallet" size={21}/><span>Demo points<strong>2,450</strong></span></div></div>
+
+      <section className="lottery-hero">
+        <div className="lottery-hero-copy">
+          <span className="game-kicker"><Icon name="trophy" size={18}/>Main game • Weekly lottery</span>
+          <h2>RoyalWin Super 7</h2>
+          <p>Choose 6 lucky numbers and join the next premium weekly draw.</p>
+          <div className="jackpot-label">Featured jackpot<strong>₹25,00,000</strong></div>
+          <button type="button" onClick={() => onNavigate("player-lottery")}>Choose lottery numbers <span>→</span></button>
+        </div>
+        <div className="lottery-hero-side">
+          <span>Draw closes in</span>
+          <Countdown />
+          <p>Sunday • 08:00 PM</p>
+        </div>
+      </section>
+
+      <section className="player-stats" aria-label="Player account summary">
+        <article><span><Icon name="ticket" size={24}/></span><p>Active tickets<strong>{tickets.length}</strong></p></article>
+        <article><span><Icon name="trophy" size={24}/></span><p>Latest result<strong>04 • 12 • 18 • 24 • 31 • 35</strong></p></article>
+        <article><span><Icon name="sparkle" size={24}/></span><p>Reward points<strong>2,450</strong></p></article>
+      </section>
+
+      <section className="player-section game-lobby-section">
+        <div className="player-section-heading"><div><span>PLAY</span><h2>Choose your game</h2></div><p>Lottery remains the main RoyalWin786 experience.</p></div>
+        <div className="game-choice-grid">
+          <button type="button" className="game-choice-card game-choice-card--lottery" onClick={() => onNavigate("player-lottery")}>
+            <span className="game-badge">PRIMARY</span><Icon name="ticket" size={42}/><h3>Weekly Lottery</h3><p>Pick 6 numbers for the RoyalWin Super 7 draw.</p><strong>Play lottery →</strong>
+          </button>
+          <button type="button" className="game-choice-card game-choice-card--roulette" onClick={() => onNavigate("player-roulette")}>
+            <span className="game-badge">BONUS GAME</span><Icon name="game" size={42}/><h3>Royal Roulette</h3><p>A quick demo-points game between weekly draws.</p><strong>Open roulette →</strong>
+          </button>
+        </div>
+      </section>
+
+      <section className="player-section ticket-preview-section">
+        <div className="player-section-heading"><div><span>MY PLAY</span><h2>Latest ticket</h2></div><button type="button" onClick={() => onNavigate("player-tickets")}>View all</button></div>
+        {latestTicket ? <article className="player-ticket-card"><div><span>{latestTicket.status}</span><h3>{latestTicket.draw}</h3><p>Ticket #{latestTicket.id}</p></div><div className="ticket-balls">{latestTicket.numbers.map((number) => <strong key={number}>{String(number).padStart(2, "0")}</strong>)}</div></article> : <p className="empty-state">No tickets yet. Choose your lottery numbers to get started.</p>}
+      </section>
+      <p className="responsible-note"><Icon name="shield" size={16}/>Demo experience only. Play responsibly and follow local age and gaming regulations.</p>
+    </PlayerLayout>
+  );
+}
+
+function LotteryGame({ onNavigate, onLogout, onSave }) {
+  const [selected, setSelected] = useState([]);
+  const [saved, setSaved] = useState(false);
+  const toggleNumber = (number) => {
+    setSaved(false);
+    setSelected((current) => current.includes(number) ? current.filter((item) => item !== number) : current.length < 6 ? [...current, number].sort((a, b) => a - b) : current);
+  };
+  const quickPick = () => {
+    const picks = [...lotteryNumbers].sort(() => Math.random() - .5).slice(0, 6).sort((a, b) => a - b);
+    setSelected(picks);
+    setSaved(false);
+  };
+  const saveTicket = () => {
+    if (selected.length !== 6) return;
+    onSave(selected);
+    setSaved(true);
+  };
+  return (
+    <PlayerLayout active="player-lottery" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
+      <div className="game-page-heading"><div><span>MAIN GAME</span><h1>RoyalWin Super 7</h1><p>Select exactly 6 numbers for the upcoming weekly lottery.</p></div><div><span>Draw closes</span><strong>Sunday • 08:00 PM</strong></div></div>
+      <div className="lottery-game-layout">
+        <section className="content-card number-picker-card">
+          <div className="picker-heading"><div><span>YOUR NUMBERS</span><h2>{selected.length}/6 selected</h2></div><button type="button" onClick={quickPick}><Icon name="sparkle" size={18}/>Quick Pick</button></div>
+          <div className="lottery-number-grid">{lotteryNumbers.map((number) => <button type="button" key={number} className={selected.includes(number) ? "selected" : ""} aria-pressed={selected.includes(number)} onClick={() => toggleNumber(number)}>{number}</button>)}</div>
+        </section>
+        <aside className="content-card ticket-builder-card">
+          <span className="game-kicker"><Icon name="ticket" size={18}/>Your lottery ticket</span>
+          <h2>RoyalWin Super 7</h2><p>Weekly draw • RW-S7-042</p>
+          <div className="ticket-balls ticket-balls--large">{Array.from({ length: 6 }, (_, index) => <strong key={index} className={!selected[index] ? "empty" : ""}>{selected[index] ? String(selected[index]).padStart(2, "0") : "—"}</strong>)}</div>
+          <div className="ticket-meta"><span>Entry<strong>100 demo points</strong></span><span>Draw<strong>Sunday, 8 PM</strong></span></div>
+          <button type="button" className="primary-button" disabled={selected.length !== 6} onClick={saveTicket}>{saved ? "Ticket saved" : "Save demo ticket"}</button>
+          {saved && <button type="button" className="text-button" onClick={() => onNavigate("player-tickets")}>View my tickets →</button>}
+        </aside>
+      </div>
+      <p className="responsible-note"><Icon name="shield" size={16}/>No payment or cash-out is connected. Production ticket purchase requires secure backend and regulatory checks.</p>
+    </PlayerLayout>
+  );
+}
+
+function PlayerTickets({ tickets, onNavigate, onLogout }) {
+  return (
+    <PlayerLayout active="player-tickets" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
+      <div className="game-page-heading"><div><span>MY PLAY</span><h1>My lottery tickets</h1><p>Track saved numbers and upcoming RoyalWin786 draws.</p></div><button type="button" className="heading-action" onClick={() => onNavigate("player-lottery")}>+ New ticket</button></div>
+      <section className="ticket-list">
+        {tickets.map((ticket) => <article className="player-ticket-card player-ticket-card--full" key={ticket.id}><div><span>{ticket.status}</span><h3>{ticket.draw}</h3><p>Ticket #{ticket.id} • Sunday, 08:00 PM</p></div><div className="ticket-balls">{ticket.numbers.map((number) => <strong key={number}>{String(number).padStart(2, "0")}</strong>)}</div><button type="button">View ticket</button></article>)}
+      </section>
+      <p className="responsible-note"><Icon name="shield" size={16}/>Ticket records shown here are frontend demo data until the player API is connected.</p>
+    </PlayerLayout>
+  );
+}
+
+function RouletteGame({ onNavigate, onLogout }) {
+  const [choice, setChoice] = useState("");
+  const [spinning, setSpinning] = useState(false);
+  const [result, setResult] = useState(null);
+  const spin = () => {
+    if (!choice || spinning) return;
+    setSpinning(true);
+    setResult(null);
+    window.setTimeout(() => {
+      const number = rouletteNumbers[Math.floor(Math.random() * rouletteNumbers.length)];
+      const color = number === 0 ? "Green" : redRouletteNumbers.has(number) ? "Red" : "Black";
+      const won = choice === color || (choice === "Even" && number !== 0 && number % 2 === 0) || (choice === "Odd" && number % 2 === 1);
+      setResult({ number, color, won });
+      setSpinning(false);
+    }, 1800);
+  };
+  return (
+    <PlayerLayout active="player-roulette" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame roulette-frame">
+      <div className="game-page-heading"><div><span>BONUS GAME</span><h1>Royal Roulette</h1><p>A quick demo-points game. Weekly lottery remains the main RoyalWin786 game.</p></div><div className="demo-balance"><Icon name="wallet" size={20}/><span>Demo balance<strong>500 points</strong></span></div></div>
+      <div className="roulette-layout">
+        <section className="roulette-stage">
+          <div className="roulette-pointer"/>
+          <div className={`roulette-wheel ${spinning ? "spinning" : ""}`}>
+            {rouletteNumbers.map((number, index) => <span key={number} style={{ "--wheel-index": index }}>{number}</span>)}
+            <div className="roulette-center"><BrandMark compact/></div>
+          </div>
+          {result && <div className={`roulette-result ${result.won ? "won" : "lost"}`}><span>Result</span><strong>{result.number} • {result.color}</strong><p>{result.won ? "You won 100 demo points!" : "Try again on the next spin."}</p></div>}
+        </section>
+        <aside className="content-card roulette-controls">
+          <span className="game-kicker"><Icon name="game" size={18}/>Place a demo choice</span>
+          <h2>Choose one option</h2><p>This game uses demo points only—no deposits or cash-out.</p>
+          <div className="roulette-choices">{["Red", "Black", "Even", "Odd"].map((item) => <button type="button" key={item} className={`${item.toLowerCase()} ${choice === item ? "selected" : ""}`} onClick={() => { setChoice(item); setResult(null); }}>{item}</button>)}</div>
+          <div className="demo-stake"><span>Demo stake</span><strong>50 points</strong></div>
+          <button type="button" className="primary-button" disabled={!choice || spinning} onClick={spin}>{spinning ? "Spinning…" : "Spin roulette"}</button>
+          <button type="button" className="text-button" onClick={() => onNavigate("player-lottery")}>Back to main lottery</button>
+        </aside>
+      </div>
+      <p className="responsible-note"><Icon name="shield" size={16}/>For entertainment/demo only. Production use requires age checks, responsible-play controls and local regulatory approval.</p>
+    </PlayerLayout>
   );
 }
 
@@ -306,13 +528,32 @@ function OrdersScreen({ onBack }) {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState("otp");
+  const [screen, setScreen] = useState(() => {
+    if (process.env.NODE_ENV === "development") {
+      const previewScreen = new URLSearchParams(window.location.search).get("screen");
+      const allowedPreviews = ["player-login", "player-dashboard", "player-lottery", "player-tickets", "player-roulette", "admin-login", "admin-dashboard"];
+      if (allowedPreviews.includes(previewScreen)) return previewScreen;
+    }
+    return "player-login";
+  });
   const [mobile, setMobile] = useState("");
+  const [playerTickets, setPlayerTickets] = useState(initialPlayerTickets);
 
-  const logout = () => { setMobile(""); setScreen("otp"); };
-  if (screen === "otp") return <OtpLogin mobile={mobile} setMobile={setMobile} onContinue={() => setScreen("mpin")} onRegister={() => { setMobile("9769980248"); setScreen("mpin"); }}/>;
-  if (screen === "mpin") return <MpinLogin mobile={mobile} onLogin={() => setScreen("dashboard")}/>;
-  if (screen === "stock") return <StockScreen onBack={() => setScreen("dashboard")}/>;
-  if (screen === "orders") return <OrdersScreen onBack={() => setScreen("dashboard")}/>;
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [screen]);
+
+  const logout = () => { setMobile(""); setScreen("player-login"); };
+  const savePlayerTicket = (numbers) => setPlayerTickets((current) => [{ id: `RW786-${String(Date.now()).slice(-6)}`, numbers, draw: "RoyalWin Super 7", status: "Upcoming" }, ...current]);
+
+  if (screen === "player-login") return <PlayerLogin mobile={mobile} setMobile={setMobile} onContinue={() => setScreen("player-mpin")} onRegister={() => { setMobile("9769980248"); setScreen("player-mpin"); }} onAdmin={() => setScreen("admin-login")}/>;
+  if (screen === "player-mpin") return <PlayerMpinLogin mobile={mobile} onBack={() => setScreen("player-login")} onLogin={() => setScreen("player-dashboard")}/>;
+  if (screen === "admin-login") return <AdminLogin onBack={() => setScreen("player-login")} onLogin={() => setScreen("admin-dashboard")}/>;
+  if (screen === "player-dashboard") return <PlayerDashboard tickets={playerTickets} onNavigate={setScreen} onLogout={logout}/>;
+  if (screen === "player-lottery") return <LotteryGame onNavigate={setScreen} onLogout={logout} onSave={savePlayerTicket}/>;
+  if (screen === "player-tickets") return <PlayerTickets tickets={playerTickets} onNavigate={setScreen} onLogout={logout}/>;
+  if (screen === "player-roulette") return <RouletteGame onNavigate={setScreen} onLogout={logout}/>;
+  if (screen === "stock") return <StockScreen onBack={() => setScreen("admin-dashboard")}/>;
+  if (screen === "orders") return <OrdersScreen onBack={() => setScreen("admin-dashboard")}/>;
   return <Dashboard onNavigate={setScreen} onLogout={logout}/>;
 }
