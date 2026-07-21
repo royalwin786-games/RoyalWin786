@@ -57,6 +57,28 @@ button { -webkit-tap-highlight-color: transparent; }
 .backend-mode-badge { width: max-content; margin-bottom: 12px; padding: 6px 9px; border-radius: 9px; display: inline-flex; align-items: center; color: #795e1f; background: #fff3cd; font-size: 9px; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; }
 .backend-mode-badge.live { color: #167246; background: #e5f7ec; }
 .auth-error { margin: 13px 0 0; padding: 10px 12px; border: 1px solid #f2c2c5; border-radius: 12px; background: #fff2f3; color: #b12d38; font-size: 11px; line-height: 1.4; }
+.auth-success { margin: 13px 0; padding: 10px 12px; border: 1px solid #bce7ce; border-radius: 12px; background: #ebfaf1; color: #147445; font-size: 11px; line-height: 1.4; }
+.auth-field { display: block; margin-top: 13px; }
+.auth-field-label { display: block; margin: 0 0 7px 3px; color: var(--navy); font-size: 11px; font-weight: 750; }
+.auth-field-control { min-height: 60px; padding: 0 16px; border: 1px solid var(--border); border-radius: 18px; display: flex; align-items: center; gap: 12px; background: #fbfcfe; color: #8090a5; }
+.auth-field-control:focus-within { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(19,168,223,.1); }
+.auth-field-control > b { min-width: 28px; padding-right: 11px; border-right: 1px solid #dce3eb; display: grid; place-items: center; color: #718197; font-size: 12px; }
+.auth-field-control input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 14px; }
+.auth-field-control input::placeholder { color: #9aa8ba; opacity: 1; }
+.forgot-password-link { display: block; margin: 12px 2px 0 auto; padding: 0; border: 0; background: transparent; color: #0b97cd; font-size: 12px; font-weight: 750; cursor: pointer; }
+.auth-divider { margin: 19px 0 15px; display: flex; align-items: center; gap: 10px; color: #8a96a6; font-size: 10px; }
+.auth-divider::before, .auth-divider::after { content: ""; height: 1px; flex: 1; background: #e9edf2; }
+.secondary-auth-button { width: 100%; min-height: 54px; border: 1px solid #b8ddec; border-radius: 17px; background: #f2fbfe; color: #087fae; font-size: 14px; font-weight: 750; cursor: pointer; }
+.registration-card { margin-top: 30px; padding: 24px 21px 25px; }
+.registration-grid { display: grid; gap: 0 10px; }
+.registration-card .primary-button { margin-top: 18px; }
+.age-consent { margin-top: 17px; display: flex; align-items: flex-start; gap: 10px; color: #667085; font-size: 11px; line-height: 1.45; cursor: pointer; }
+.age-consent input { width: 17px; height: 17px; flex: 0 0 17px; margin: 0; accent-color: var(--cyan); }
+.otp-code-field { display: block; }
+.otp-code-field > span { display: block; margin-bottom: 8px; color: var(--navy); font-size: 11px; font-weight: 750; }
+.otp-code-field input { width: 100%; height: 70px; border: 1px solid var(--border); border-radius: 19px; outline: 0; background: #fbfcfe; color: var(--navy); text-align: center; font-size: 27px; font-weight: 800; letter-spacing: .45em; text-indent: .45em; }
+.otp-code-field input:focus { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(19,168,223,.1); }
+.otp-code-field input::placeholder { color: #b2bdca; }
 .email-input { height: 66px; display: flex; align-items: center; border: 1px solid var(--border); border-radius: 20px; padding: 0 20px; color: var(--ink); background: #fbfcfe; }
 .email-input:focus-within { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(19,168,223,.1); }
 .email-input strong { font-size: 19px; }
@@ -251,6 +273,13 @@ button { -webkit-tap-highlight-color: transparent; }
   .mpin-screen .brand-block p { margin-top: 15px; font-size: 19px; }
   .mpin-card { grid-column: 2; grid-row: 1; width: min(100%, 500px); margin: 0; padding: 35px; align-self: end; }
   .login-action { grid-column: 2; grid-row: 2; width: min(100%, 500px); height: 65px; margin: 16px 0 0 auto; align-self: start; background: linear-gradient(135deg, #c59631, #e4bb58); color: #09162f; }
+  .auth-field-control { min-height: 64px; padding: 0 18px; }
+  .auth-field-control input { font-size: 15px; }
+  .registration-screen { grid-template-columns: minmax(360px, .82fr) minmax(570px, 1.18fr); gap: clamp(45px, 6vw, 105px); padding-top: 38px; padding-bottom: 38px; }
+  .registration-card { width: min(100%, 650px); margin: 0; padding: 33px 35px; }
+  .registration-grid { grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  .registration-card .auth-card-heading { margin-bottom: 18px; }
+  .registration-card .auth-card-heading h2 { font-size: 27px; }
 
   .app-header { height: 84px; padding: 0 clamp(30px, 4vw, 64px); background: rgba(255,255,255,.96); box-shadow: 0 3px 18px rgba(23,40,67,.06); }
   .brand-mark--compact { width: 52px; height: 52px; flex-basis: 52px; border-radius: 16px; }

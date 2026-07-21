@@ -4,7 +4,8 @@ Original responsive RoyalWin786 player and admin platform built with React. The 
 
 ## Included flows
 
-- Player-first passwordless email-link login with a separate admin login
+- Player registration with full name, email, mobile number, age and password
+- Six-digit email OTP verification, email/mobile password login and email password recovery
 - Restricted admin credential login with role enforcement
 - Responsive player lobby with desktop navigation and mobile app tabs
 - RoyalWin Super 7 number picker with transactional ticket purchase
@@ -27,7 +28,8 @@ npm start
 
 The repository includes an optional Supabase PostgreSQL backend scaffold with:
 
-- Passwordless email-link and admin password authentication services
+- Player email/password authentication with email OTP confirmation and secure phone-number aliases
+- Password recovery links and a separate admin password authentication service
 - Player/admin profiles and role enforcement
 - Draws, lottery tickets, points wallets, immutable ledger entries, responsible-play settings, audit events, and demo roulette history
 - Row Level Security policies for player-owned data and admin-only operations
