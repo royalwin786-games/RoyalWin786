@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 
 const reportItems = [
-  { icon: "chart", label: "Netsale Report", screen: "orders" },
-  { icon: "money", label: "Sold / Unsold Pwt", screen: "orders" },
-  { icon: "clipboard", label: "Full Stock Report", screen: "stock" },
-  { icon: "cart", label: "Unsold", screen: "stock" },
+  { icon: "chart", label: "Net Sales Report", screen: "orders" },
+  { icon: "money", label: "Sold / Unsold", screen: "orders" },
+  { icon: "clipboard", label: "Stock Summary", screen: "stock" },
+  { icon: "cart", label: "Unsold Entry", screen: "stock" },
   { icon: "purchase", label: "Purchase Report", screen: "orders" },
   { icon: "document", label: "Unsold Details", screen: "orders" },
-  { icon: "arrange", label: "Arrange", screen: "stock" },
+  { icon: "arrange", label: "Series Arrange", screen: "stock" },
 ];
 
 const orderGroups = [
-  { name: "RAJSHREE GURU WEEKLY LOTTERY", code: "1230", date: "15/01/2026" },
-  { name: "RAJSHREE LOTUS WEEKLY LOTTERY", code: "1223", date: "15/01/2026" },
+  { name: "ROYALWIN GOLD WEEKLY DRAW", code: "RW1230", date: "15/01/2026" },
+  { name: "ROYALWIN DIAMOND WEEKLY DRAW", code: "RW1223", date: "15/01/2026" },
 ];
 
 function Icon({ name, size = 24, strokeWidth = 1.8 }) {
@@ -48,53 +48,17 @@ function Icon({ name, size = 24, strokeWidth = 1.8 }) {
     delete: <><path d="m8 8-3 4 3 4h11V8zM12 10l4 4M16 10l-4 4"/></>,
     qr: <><path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h2v2h-2zM19 15h2v6h-2zM15 19h2v2h-2z"/></>,
     copy: <><rect x="8" y="7" width="10" height="13" rx="2"/><path d="M6 16H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2"/></>,
+    home: <><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10M9 20v-6h6v6"/></>,
+    shield: <><path d="M12 3 4 6v5c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6z"/><path d="m9 12 2 2 4-5"/></>,
   };
 
   return <svg {...common}>{paths[name] || paths.ticket}</svg>;
 }
 
-function RupeeLogo({ compact = false }) {
+function BrandMark({ compact = false }) {
   return (
-    <div className={`rupee-logo ${compact ? "rupee-logo--compact" : ""}`} aria-label="Rajshree Lottery logo">
-      <svg viewBox="0 0 100 100" role="img">
-        <defs>
-          <linearGradient id="orangeArc" x1="0" x2="1">
-            <stop offset="0" stopColor="#ffc91d"/><stop offset="1" stopColor="#f17320"/>
-          </linearGradient>
-          <linearGradient id="redArc" x1="0" x2="1">
-            <stop offset="0" stopColor="#b20e23"/><stop offset="1" stopColor="#f04331"/>
-          </linearGradient>
-        </defs>
-        <path d="M22 40C28 18 55 10 76 23" stroke="url(#orangeArc)" strokeWidth="17" fill="none" strokeLinecap="round"/>
-        <path d="M77 27c12 18 4 44-14 55" stroke="#0987be" strokeWidth="17" fill="none" strokeLinecap="round"/>
-        <path d="M59 83C36 91 16 74 18 52" stroke="url(#redArc)" strokeWidth="17" fill="none" strokeLinecap="round"/>
-        <circle cx="49" cy="50" r="22" fill="#13a9d8"/>
-        <text x="49" y="60" textAnchor="middle" fontSize="34" fill="white" fontFamily="Arial, sans-serif">₹</text>
-      </svg>
-    </div>
-  );
-}
-
-function StatusBar() {
-  const [time, setTime] = useState(() => new Date());
-  useEffect(() => {
-    const timer = window.setInterval(() => setTime(new Date()), 30000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  return (
-    <div className="status-bar" aria-hidden="true">
-      <span className="status-time">{time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-      <div className="status-social"><span>f</span><span>−</span><span>f</span><b>∞</b></div>
-      <div className="status-system"><b>N</b><small>Vo<br/>WiFi</small><i className="wifi"/><i className="signal"/><i className="battery"/></div>
-    </div>
-  );
-}
-
-function AndroidNav() {
-  return (
-    <div className="android-nav" aria-hidden="true">
-      <span className="android-back"/><span className="android-home"/><span className="android-switch"/>
+    <div className={`brand-mark ${compact ? "brand-mark--compact" : ""}`} aria-label="RoyalWin786 logo">
+      <img src={`${process.env.PUBLIC_URL}/royalwin786-logo.png`} alt="" />
     </div>
   );
 }
@@ -103,9 +67,7 @@ function AppFrame({ children, className = "" }) {
   return (
     <main className={`app-frame ${className}`}>
       <div className="blob blob--blue"/><div className="blob blob--yellow"/>
-      <StatusBar />
       <div className="screen-body">{children}</div>
-      <AndroidNav />
     </main>
   );
 }
@@ -113,10 +75,16 @@ function AppFrame({ children, className = "" }) {
 function Brand({ showVersion = false }) {
   return (
     <section className="brand-block">
-      <RupeeLogo />
-      <h1>राजश्री लॉटरी</h1>
-      <p>Government Lottery</p>
-      {showVersion && <small>Ver-1.2.54</small>}
+      <span className="brand-kicker">Secure partner platform</span>
+      <BrandMark />
+      <h1>RoyalWin<span>786</span></h1>
+      <p>Smart draw, stock and ticket management</p>
+      <div className="brand-benefits" aria-label="Platform benefits">
+        <span><Icon name="shield" size={18}/>Secure access</span>
+        <span><Icon name="chart" size={18}/>Live insights</span>
+        <span><Icon name="ticket" size={18}/>Fast operations</span>
+      </div>
+      {showVersion && <small>RoyalWin Web &amp; App • v2.0</small>}
     </section>
   );
 }
@@ -128,11 +96,13 @@ function OtpLogin({ mobile, setMobile, onContinue, onRegister }) {
       <div className="otp-screen">
         <Brand />
         <section className="auth-card otp-card">
+          <div className="auth-card-heading"><span>Partner login</span><h2>Welcome back</h2><p>Enter your registered mobile number to continue securely.</p></div>
           <label className="phone-input">
             <strong>+91</strong><span/><input value={mobile} inputMode="numeric" maxLength={10} placeholder="Enter mobile number" onChange={(event) => setMobile(event.target.value.replace(/\D/g, ""))}/>
           </label>
           <button type="button" className="primary-button" disabled={!valid} onClick={onContinue}>Request OTP</button>
-          <button type="button" className="text-button" onClick={onRegister}>New User ? <strong>Register</strong></button>
+          <button type="button" className="text-button" onClick={onRegister}>New partner? <strong>Create account</strong></button>
+          <p className="secure-note"><Icon name="shield" size={16}/>Your login is protected with secure verification.</p>
         </section>
       </div>
     </AppFrame>
@@ -155,8 +125,7 @@ function MpinLogin({ mobile, onLogin }) {
       <div className="mpin-screen">
         <Brand showVersion />
         <section className="auth-card mpin-card">
-          <h2>Hello {mobile || "9769980248"}</h2>
-          <p>Login with</p>
+          <div className="auth-card-heading"><span>Secure sign in</span><h2>Hello {mobile || "9769980248"}</h2><p>Choose your preferred login method.</p></div>
           <div className="login-methods"><button type="button" className="outline-pill">Biometric</button><button type="button" className="solid-pill">MPIN</button></div>
           <label className="mpin-label">Enter MPIN</label>
           <div className="mpin-row">
@@ -171,11 +140,17 @@ function MpinLogin({ mobile, onLogin }) {
   );
 }
 
-function AppHeader({ onLogout }) {
+function AppHeader({ onLogout, onNavigate }) {
   return (
     <header className="app-header">
-      <button type="button" className="brand-menu" aria-label="Open menu"><RupeeLogo compact/><span>☰</span></button>
-      <button type="button" className="icon-button" aria-label="Logout" onClick={onLogout}><Icon name="logout" size={27}/></button>
+      <div className="header-brand"><BrandMark compact/><span><strong>RoyalWin786</strong><small>Partner Console</small></span></div>
+      <nav className="desktop-nav" aria-label="Desktop navigation">
+        <button type="button" className="active"><Icon name="home" size={18}/>Overview</button>
+        <button type="button" onClick={() => onNavigate("orders")}><Icon name="trophy" size={18}/>Results</button>
+        <button type="button" onClick={() => onNavigate("stock")}><Icon name="cube" size={18}/>Stock</button>
+        <button type="button" onClick={() => onNavigate("orders")}><Icon name="document" size={18}/>Orders</button>
+      </nav>
+      <button type="button" className="icon-button logout-button" aria-label="Logout" onClick={onLogout}><Icon name="logout" size={24}/><span>Logout</span></button>
     </header>
   );
 }
@@ -198,10 +173,10 @@ function Countdown() {
 
 function BottomMenu({ onNavigate }) {
   const items = [
-    { icon: "trophy", label: "View Result", screen: "orders" },
-    { icon: "cube", label: "View Stock", screen: "stock", active: true },
+    { icon: "home", label: "Overview", screen: "dashboard", active: true },
+    { icon: "trophy", label: "Results", screen: "orders" },
+    { icon: "cube", label: "Stock", screen: "stock" },
     { icon: "ticket", label: "Verify Ticket", screen: "orders" },
-    { icon: "ticket", label: "Ticket Query", screen: "orders" },
   ];
   return (
     <nav className="bottom-menu" aria-label="Main navigation">
@@ -214,15 +189,16 @@ function Dashboard({ onNavigate, onLogout }) {
   return (
     <AppFrame className="dashboard-frame">
       <div className="dashboard-screen">
-        <AppHeader onLogout={onLogout}/>
+        <AppHeader onLogout={onLogout} onNavigate={onNavigate}/>
         <div className="dashboard-content">
+          <div className="page-heading"><div><span>Dashboard</span><h1>Good afternoon, partner</h1><p>Here is your RoyalWin786 activity overview.</p></div><button type="button" onClick={() => onNavigate("stock")}>Manage stock <span>→</span></button></div>
           <section className="content-card timer-card">
-            <div className="section-heading"><span className="chip"><Icon name="clock" size={19}/>Next Unsold</span><h2>Remaining Time</h2></div>
+            <div className="section-heading"><span className="chip"><Icon name="clock" size={19}/>Next draw close</span><h2>Time remaining</h2></div>
             <Countdown />
           </section>
           <section className="content-card latest-card">
-            <span className="chip"><i/>Latest Unsold</span>
-            <h2>RAJSHREE GURU WEEKLY LOTTERY</h2>
+            <span className="chip"><i/>Latest draw</span>
+            <h2>ROYALWIN GOLD WEEKLY DRAW</h2>
             <div className="draw-grid">
               <div><span className="round-icon"><Icon name="calendar" size={23}/></span><p>Draw Date<strong>15/01/2026</strong></p></div>
               <div><span className="round-icon"><Icon name="clock" size={23}/></span><p>Time<strong>01:00 PM</strong></p></div>
@@ -268,7 +244,7 @@ function StockScreen({ onBack }) {
         <div className="details-content">
           <section className="content-card stock-summary">
             <div className="summary-top"><span>Draw Date: 20-01-2026</span><button type="button"><Icon name="eye" size={23}/>View Stock</button></div>
-            <h2>RAJSHREE MANGAL WEEKLY LOTTERY - 1233</h2>
+            <h2>ROYALWIN PREMIUM WEEKLY DRAW - RW1233</h2>
             <div className="stock-range">
               <div className="stock-tags"><span>Book 50</span><span>Series 00</span></div>
               <div className="stock-values"><p>From<strong>2015</strong></p><p>To<strong>2015</strong></p><p>Qty<strong>50</strong></p><button type="button" aria-label="Reset stock"><Icon name="reset" size={28}/></button></div>
@@ -296,16 +272,16 @@ function StockScreen({ onBack }) {
   );
 }
 
-function LotteryOrder({ lottery, cleared }) {
+function DrawOrder({ draw, cleared }) {
   return (
-    <>
+    <div className="order-group">
       <section className="lottery-order">
-        <div className="lottery-order__head"><div><h2>{lottery.name}</h2><p>DDATE: {lottery.date} • CODE: {lottery.code}</p></div><span>Total</span></div>
+        <div className="lottery-order__head"><div><h2>{draw.name}</h2><p>DRAW DATE: {draw.date} • CODE: {draw.code}</p></div><span>Total</span></div>
         <div className="order-bands">{["5/5","10/10","25/25","50/50","100/100"].map((item) => <strong key={item}>{item}</strong>)}</div>
         <div className="order-inputs"><span><Icon name="copy" size={24}/></span>{[0,1,2,3,4].map((item) => <div key={item}>{cleared ? 0 : 0}</div>)}</div>
       </section>
-      <section className="lottery-total"><div><h2>{lottery.name} -<br/>{lottery.code}</h2><p>Totals for this lottery</p></div><span>Grand<strong>0</strong></span></section>
-    </>
+      <section className="lottery-total"><div><h2>{draw.name}<br/>{draw.code}</h2><p>Total tickets for this draw</p></div><span>Grand<strong>0</strong></span></section>
+    </div>
   );
 }
 
@@ -317,7 +293,7 @@ function OrdersScreen({ onBack }) {
       <div className="details-screen orders-screen">
         <ScreenTopBar title="View Order List" onBack={onBack} action={<button type="button" className="clear-orders" onClick={() => { setCleared(true); setSubmitted(false); }}>Clear</button>}/>
         <div className="orders-content">
-          {orderGroups.map((lottery) => <LotteryOrder key={lottery.code} lottery={lottery} cleared={cleared}/>) }
+          {orderGroups.map((draw) => <DrawOrder key={draw.code} draw={draw} cleared={cleared}/>) }
         </div>
         <div className="order-footer">
           <div className="grand-total"><span>Grand Total</span><strong>0</strong></div>
