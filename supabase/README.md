@@ -11,6 +11,8 @@
    - Subject: `{{ .Token }} is your RoyalWin786 verification code`
    - Body: paste the contents of `templates/confirmation.html`
 
+   For **Reset password**, use subject `Reset your RoyalWin786 password` and paste `templates/recovery.html` as the body.
+
    The OTP form requires the `{{ .Token }}` variable. A template containing only `{{ .ConfirmationURL }}` sends a link instead of a six-digit code. New free-tier projects using Supabase's default SMTP may not allow template customization, so custom SMTP is required for this OTP-only signup flow.
 5. In **Authentication → URL Configuration**, use `https://royalwin786-games.github.io/RoyalWin786/` as the Site URL and an allowed Redirect URL. Password recovery returns to `?recovery=1` on this URL.
 6. Deploy the public, rate-limited phone identifier function:
