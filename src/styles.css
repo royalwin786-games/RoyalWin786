@@ -54,12 +54,15 @@ button { -webkit-tap-highlight-color: transparent; }
 .auth-card-heading > span { color: var(--gold); font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .auth-card-heading h2 { margin: 8px 0 6px; color: var(--navy); font-size: 24px; line-height: 1.2; }
 .auth-card-heading p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
-.phone-input { height: 66px; display: flex; align-items: center; border: 1px solid var(--border); border-radius: 20px; padding: 0 20px; color: var(--ink); background: #fbfcfe; }
-.phone-input:focus-within { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(19,168,223,.1); }
-.phone-input strong { font-size: 19px; }
-.phone-input > span { width: 1px; height: 31px; margin: 0 17px; background: #d9e0e8; }
-.phone-input input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 17px; }
-.phone-input input::placeholder { color: #9aa8ba; opacity: 1; }
+.backend-mode-badge { width: max-content; margin-bottom: 12px; padding: 6px 9px; border-radius: 9px; display: inline-flex; align-items: center; color: #795e1f; background: #fff3cd; font-size: 9px; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; }
+.backend-mode-badge.live { color: #167246; background: #e5f7ec; }
+.auth-error { margin: 13px 0 0; padding: 10px 12px; border: 1px solid #f2c2c5; border-radius: 12px; background: #fff2f3; color: #b12d38; font-size: 11px; line-height: 1.4; }
+.email-input { height: 66px; display: flex; align-items: center; border: 1px solid var(--border); border-radius: 20px; padding: 0 20px; color: var(--ink); background: #fbfcfe; }
+.email-input:focus-within { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(19,168,223,.1); }
+.email-input strong { font-size: 19px; }
+.email-input > span { width: 1px; height: 31px; margin: 0 17px; background: #d9e0e8; }
+.email-input input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 17px; }
+.email-input input::placeholder { color: #9aa8ba; opacity: 1; }
 .primary-button { height: 64px; width: 100%; border: 0; border-radius: 20px; background: linear-gradient(135deg, #0d9fd7, #16b8df); color: white; font-size: 16px; font-weight: 750; box-shadow: 0 9px 19px rgba(13,126,174,.23); cursor: pointer; }
 .primary-button:disabled { background: #b7deed; box-shadow: none; cursor: default; }
 .otp-card .primary-button { margin-top: 19px; }
@@ -73,12 +76,13 @@ button { -webkit-tap-highlight-color: transparent; }
 .mpin-screen .brand-block p { margin-top: 6px; font-size: 13px; }
 .mpin-card { margin-top: 26px; padding: 24px 21px 25px; }
 .mpin-card .auth-card-heading { margin-bottom: 18px; }
+.email-sent-icon { width: 82px; height: 82px; margin: 20px auto 24px; display: grid; place-items: center; border-radius: 26px; color: var(--cyan); background: var(--cyan-soft); box-shadow: inset 0 0 0 1px rgba(19,168,223,.16); }
 .login-methods { display: flex; gap: 10px; }
 .login-methods button { flex: 1; height: 52px; border-radius: 18px; font-size: 16px; font-weight: 750; cursor: pointer; }
 .outline-pill { border: 1.5px solid var(--cyan); background: white; color: #0998d0; }
 .solid-pill { border: 0; background: var(--navy); color: white; }
 .mpin-label { display: block; margin-top: 23px; font-size: 14px; font-weight: 750; }
-.mpin-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+.mpin-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 12px; }
 .mpin-row input { width: 100%; height: 66px; border: 1px solid var(--border); border-radius: 18px; outline: 0; text-align: center; font-size: 23px; color: #718096; background: #fbfcfe; }
 .mpin-row input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(19,168,223,.1); }
 .mpin-row input::placeholder { color: #91a0b2; opacity: 1; }
@@ -238,7 +242,7 @@ button { -webkit-tap-highlight-color: transparent; }
   .auth-card-heading { margin-bottom: 28px; }
   .auth-card-heading h2 { font-size: 30px; }
   .auth-card-heading p { font-size: 15px; }
-  .phone-input { height: 70px; }
+  .email-input { height: 70px; }
   .primary-button { height: 67px; }
   .mpin-screen { grid-template-rows: auto auto; }
   .mpin-screen .brand-block { grid-column: 1; grid-row: 1 / 3; }

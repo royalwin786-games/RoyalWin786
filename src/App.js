@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { isSupabaseConfigured } from "./lib/supabase";
+import { getCurrentIdentity, requestPlayerMagicLink, signInAdmin, signOut } from "./services/authService";
+import { getFeaturedLotteryDraw, getPlayerTickets, getPlayerWallet, playDemoRoulette, purchaseLotteryTicket } from "./services/gameService";
 
 const reportItems = [
   { icon: "chart", label: "Net Sales Report", screen: "orders" },
@@ -101,20 +104,31 @@ function Brand({ showVersion = false }) {
   );
 }
 
-function PlayerLogin({ mobile, setMobile, onContinue, onRegister, onAdmin }) {
-  const valid = mobile.replace(/\D/g, "").length === 10;
+function PlayerLogin({ email, setEmail, onContinue, onRegister, onAdmin, backendEnabled }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const submit = async (action) => {
+    if (!valid || loading) return;
+    setLoading(true);
+    setError("");
+    try { await action(); } catch (requestError) { setError(requestError.message || "Unable to send the sign-in email."); }
+    finally { setLoading(false); }
+  };
   return (
     <AppFrame className="auth-frame player-auth-frame">
       <div className="otp-screen player-login-screen">
         <button type="button" className="admin-access-link" onClick={onAdmin}><Icon name="lock" size={16}/>Admin Login</button>
         <Brand />
         <section className="auth-card otp-card">
-          <div className="auth-card-heading"><span>Players &amp; users</span><h2>Play with RoyalWin786</h2><p>Enter your registered mobile number to access lottery tickets, results and games.</p></div>
-          <label className="phone-input">
-            <strong>+91</strong><span/><input value={mobile} inputMode="numeric" maxLength={10} placeholder="Enter mobile number" onChange={(event) => setMobile(event.target.value.replace(/\D/g, ""))}/>
+          <span className={`backend-mode-badge ${backendEnabled ? "live" : "demo"}`}>{backendEnabled ? "Live secure login" : "Frontend demo mode"}</span>
+          <div className="auth-card-heading"><span>Players &amp; users</span><h2>Play with RoyalWin786</h2><p>Enter your email address to access lottery tickets, results and games.</p></div>
+          <label className="email-input">
+            <strong>@</strong><span/><input type="email" value={email} autoComplete="email" placeholder="Enter email address" onChange={(event) => setEmail(event.target.value)}/>
           </label>
-          <button type="button" className="primary-button" disabled={!valid} onClick={onContinue}>Request OTP</button>
-          <button type="button" className="text-button" onClick={onRegister}>New player? <strong>Create account</strong></button>
+          {error && <p className="auth-error">{error}</p>}
+          <button type="button" className="primary-button" disabled={!valid || loading} onClick={() => submit(onContinue)}>{loading ? "Sending…" : "Send secure sign-in link"}</button>
+          <button type="button" className="text-button" onClick={() => submit(onRegister)}>New player? <strong>Create account</strong></button>
           <p className="secure-note"><Icon name="shield" size={16}/>Your login is protected with secure verification.</p>
         </section>
       </div>
@@ -122,16 +136,15 @@ function PlayerLogin({ mobile, setMobile, onContinue, onRegister, onAdmin }) {
   );
 }
 
-function PlayerMpinLogin({ mobile, onLogin, onBack }) {
-  const [mpin, setMpin] = useState(["", "", "", ""]);
-  const refs = useRef([]);
-  const [biometric, setBiometric] = useState(false);
-  const valid = mpin.every(Boolean);
-
-  const changeDigit = (index, value) => {
-    const digit = value.replace(/\D/g, "").slice(-1);
-    setMpin((current) => current.map((item, itemIndex) => itemIndex === index ? digit : item));
-    if (digit && refs.current[index + 1]) refs.current[index + 1].focus();
+function PlayerEmailSent({ email, onBack, onResend, backendEnabled }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const resend = async () => {
+    if (loading) return;
+    setLoading(true);
+    setError("");
+    try { await onResend(); } catch (resendError) { setError(resendError.message || "Unable to resend the sign-in email."); }
+    finally { setLoading(false); }
   };
 
   return (
@@ -139,37 +152,46 @@ function PlayerMpinLogin({ mobile, onLogin, onBack }) {
       <div className="mpin-screen">
         <Brand showVersion />
         <section className="auth-card mpin-card">
-          <button type="button" className="auth-back-link" onClick={onBack}>← Change mobile number</button>
-          <div className="auth-card-heading"><span>Player verification</span><h2>Hello {mobile || "9769980248"}</h2><p>Enter your MPIN to open the RoyalWin786 player lobby.</p></div>
-          <div className="login-methods"><button type="button" className="outline-pill">Biometric</button><button type="button" className="solid-pill">MPIN</button></div>
-          <label className="mpin-label">Enter MPIN</label>
-          <div className="mpin-row">
-            {mpin.map((digit, index) => <input key={index} ref={(node) => { refs.current[index] = node; }} type="password" inputMode="numeric" maxLength={1} value={digit} placeholder="•" aria-label={`MPIN digit ${index + 1}`} onChange={(event) => changeDigit(index, event.target.value)} />)}
-          </div>
-          <button type="button" className="forgot-button">Forgot MPIN</button>
-          <div className="biometric-row"><strong>Enable Biometric</strong><button type="button" aria-pressed={biometric} aria-label="Enable biometric" className={`toggle ${biometric ? "toggle--on" : ""}`} onClick={() => setBiometric((value) => !value)}><span/></button></div>
+          <button type="button" className="auth-back-link" onClick={onBack}>← Change email address</button>
+          <span className={`backend-mode-badge ${backendEnabled ? "live" : "demo"}`}>{backendEnabled ? "Secure email link" : "Frontend demo mode"}</span>
+          <div className="auth-card-heading"><span>Player verification</span><h2>Check your inbox</h2><p>We sent a secure sign-in link to <strong>{email || "player@example.com"}</strong>. Open that email and tap “Sign in” to enter your Player Lobby.</p></div>
+          <div className="email-sent-icon"><Icon name="shield" size={34}/></div>
+          {error && <p className="auth-error">{error}</p>}
+          <button type="button" className="primary-button" disabled={loading} onClick={resend}>{loading ? "Sending…" : "Resend sign-in email"}</button>
+          <p className="secure-note"><Icon name="shield" size={16}/>For security, use the newest link received in your inbox.</p>
         </section>
-        <button type="button" className="login-action" disabled={!valid} onClick={onLogin}>Enter Player Lobby</button>
       </div>
     </AppFrame>
   );
 }
 
-function AdminLogin({ onBack, onLogin }) {
+function AdminLogin({ onBack, onLogin, backendEnabled }) {
   const [credentials, setCredentials] = useState({ userId: "", password: "" });
-  const valid = credentials.userId.trim() && credentials.password.trim();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const valid = Boolean(credentials.userId.trim() && credentials.password.trim());
   const update = (field, value) => setCredentials((current) => ({ ...current, [field]: value }));
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!valid || loading) return;
+    setLoading(true);
+    setError("");
+    try { await onLogin(credentials); } catch (loginError) { setError(loginError.message || "Admin login failed."); }
+    finally { setLoading(false); }
+  };
 
   return (
     <AppFrame className="auth-frame admin-auth-frame">
       <div className="otp-screen admin-login-screen">
         <Brand />
-        <form className="auth-card otp-card admin-login-card" onSubmit={(event) => { event.preventDefault(); if (valid) onLogin(); }}>
+        <form className="auth-card otp-card admin-login-card" onSubmit={submit}>
           <button type="button" className="auth-back-link" onClick={onBack}>← Back to player login</button>
+          <span className={`backend-mode-badge ${backendEnabled ? "live" : "demo"}`}>{backendEnabled ? "Live admin authentication" : "Frontend demo mode"}</span>
           <div className="auth-card-heading"><span>Restricted access</span><h2>Admin Console</h2><p>Use your authorized admin credentials to manage stock, reports and draw operations.</p></div>
-          <label className="credential-input"><span><Icon name="user" size={20}/></span><input value={credentials.userId} autoComplete="username" placeholder="Admin ID or email" onChange={(event) => update("userId", event.target.value)}/></label>
+          <label className="credential-input"><span><Icon name="user" size={20}/></span><input type="email" value={credentials.userId} autoComplete="username" placeholder="Admin email" onChange={(event) => update("userId", event.target.value)}/></label>
           <label className="credential-input"><span><Icon name="lock" size={20}/></span><input type="password" value={credentials.password} autoComplete="current-password" placeholder="Password" onChange={(event) => update("password", event.target.value)}/></label>
-          <button type="submit" className="primary-button admin-login-button" disabled={!valid}>Secure Admin Login</button>
+          {error && <p className="auth-error">{error}</p>}
+          <button type="submit" className="primary-button admin-login-button" disabled={!valid || loading}>{loading ? "Signing in…" : "Secure Admin Login"}</button>
           <p className="secure-note"><Icon name="shield" size={16}/>Credentials must be validated by your secure backend before production launch.</p>
         </form>
       </div>
@@ -221,11 +243,11 @@ function PlayerLayout({ active, onNavigate, onLogout, children, className = "" }
   );
 }
 
-function PlayerDashboard({ tickets, onNavigate, onLogout }) {
+function PlayerDashboard({ tickets, walletPoints, onNavigate, onLogout }) {
   const latestTicket = tickets[0];
   return (
     <PlayerLayout active="player-dashboard" onNavigate={onNavigate} onLogout={onLogout}>
-      <div className="player-welcome"><div><span>PLAYER LOBBY</span><h1>Good afternoon, Rahul</h1><p>Your next RoyalWin chance is ready.</p></div><div className="player-points"><Icon name="wallet" size={21}/><span>Demo points<strong>2,450</strong></span></div></div>
+      <div className="player-welcome"><div><span>PLAYER LOBBY</span><h1>Good afternoon, player</h1><p>Your next RoyalWin chance is ready.</p></div><div className="player-points"><Icon name="wallet" size={21}/><span>Points balance<strong>{walletPoints.toLocaleString("en-IN")}</strong></span></div></div>
 
       <section className="lottery-hero">
         <div className="lottery-hero-copy">
@@ -245,7 +267,7 @@ function PlayerDashboard({ tickets, onNavigate, onLogout }) {
       <section className="player-stats" aria-label="Player account summary">
         <article><span><Icon name="ticket" size={24}/></span><p>Active tickets<strong>{tickets.length}</strong></p></article>
         <article><span><Icon name="trophy" size={24}/></span><p>Latest result<strong>04 • 12 • 18 • 24 • 31 • 35</strong></p></article>
-        <article><span><Icon name="sparkle" size={24}/></span><p>Reward points<strong>2,450</strong></p></article>
+        <article><span><Icon name="sparkle" size={24}/></span><p>Reward points<strong>{walletPoints.toLocaleString("en-IN")}</strong></p></article>
       </section>
 
       <section className="player-section game-lobby-section">
@@ -269,37 +291,47 @@ function PlayerDashboard({ tickets, onNavigate, onLogout }) {
   );
 }
 
-function LotteryGame({ onNavigate, onLogout, onSave }) {
+function LotteryGame({ onNavigate, onLogout, onSave, draw }) {
   const [selected, setSelected] = useState([]);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const pickCount = draw?.picks_required || 6;
+  const availableNumbers = Array.from({ length: draw?.max_number || lotteryNumbers.length }, (_, index) => index + 1);
   const toggleNumber = (number) => {
     setSaved(false);
-    setSelected((current) => current.includes(number) ? current.filter((item) => item !== number) : current.length < 6 ? [...current, number].sort((a, b) => a - b) : current);
+    setError("");
+    setSelected((current) => current.includes(number) ? current.filter((item) => item !== number) : current.length < pickCount ? [...current, number].sort((a, b) => a - b) : current);
   };
   const quickPick = () => {
-    const picks = [...lotteryNumbers].sort(() => Math.random() - .5).slice(0, 6).sort((a, b) => a - b);
+    const picks = [...availableNumbers].sort(() => Math.random() - .5).slice(0, pickCount).sort((a, b) => a - b);
     setSelected(picks);
     setSaved(false);
+    setError("");
   };
-  const saveTicket = () => {
-    if (selected.length !== 6) return;
-    onSave(selected);
-    setSaved(true);
+  const saveTicket = async () => {
+    if (selected.length !== pickCount || saving) return;
+    setSaving(true);
+    setError("");
+    try { await onSave(selected); setSaved(true); }
+    catch (saveError) { setError(saveError.message || "Unable to save this ticket."); }
+    finally { setSaving(false); }
   };
   return (
     <PlayerLayout active="player-lottery" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
-      <div className="game-page-heading"><div><span>MAIN GAME</span><h1>RoyalWin Super 7</h1><p>Select exactly 6 numbers for the upcoming weekly lottery.</p></div><div><span>Draw closes</span><strong>Sunday • 08:00 PM</strong></div></div>
+      <div className="game-page-heading"><div><span>MAIN GAME</span><h1>{draw?.name || "RoyalWin Super 7"}</h1><p>Select exactly {pickCount} numbers for the upcoming weekly lottery.</p></div><div><span>Draw closes</span><strong>{draw?.closes_at ? new Date(draw.closes_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Sunday • 08:00 PM"}</strong></div></div>
       <div className="lottery-game-layout">
         <section className="content-card number-picker-card">
-          <div className="picker-heading"><div><span>YOUR NUMBERS</span><h2>{selected.length}/6 selected</h2></div><button type="button" onClick={quickPick}><Icon name="sparkle" size={18}/>Quick Pick</button></div>
-          <div className="lottery-number-grid">{lotteryNumbers.map((number) => <button type="button" key={number} className={selected.includes(number) ? "selected" : ""} aria-pressed={selected.includes(number)} onClick={() => toggleNumber(number)}>{number}</button>)}</div>
+          <div className="picker-heading"><div><span>YOUR NUMBERS</span><h2>{selected.length}/{pickCount} selected</h2></div><button type="button" onClick={quickPick}><Icon name="sparkle" size={18}/>Quick Pick</button></div>
+          <div className="lottery-number-grid">{availableNumbers.map((number) => <button type="button" key={number} className={selected.includes(number) ? "selected" : ""} aria-pressed={selected.includes(number)} onClick={() => toggleNumber(number)}>{number}</button>)}</div>
         </section>
         <aside className="content-card ticket-builder-card">
           <span className="game-kicker"><Icon name="ticket" size={18}/>Your lottery ticket</span>
-          <h2>RoyalWin Super 7</h2><p>Weekly draw • RW-S7-042</p>
-          <div className="ticket-balls ticket-balls--large">{Array.from({ length: 6 }, (_, index) => <strong key={index} className={!selected[index] ? "empty" : ""}>{selected[index] ? String(selected[index]).padStart(2, "0") : "—"}</strong>)}</div>
-          <div className="ticket-meta"><span>Entry<strong>100 demo points</strong></span><span>Draw<strong>Sunday, 8 PM</strong></span></div>
-          <button type="button" className="primary-button" disabled={selected.length !== 6} onClick={saveTicket}>{saved ? "Ticket saved" : "Save demo ticket"}</button>
+          <h2>{draw?.name || "RoyalWin Super 7"}</h2><p>Weekly draw • {draw?.code || "RW-S7-042"}</p>
+          <div className="ticket-balls ticket-balls--large">{Array.from({ length: pickCount }, (_, index) => <strong key={index} className={!selected[index] ? "empty" : ""}>{selected[index] ? String(selected[index]).padStart(2, "0") : "—"}</strong>)}</div>
+          <div className="ticket-meta"><span>Entry<strong>{draw?.entry_points || 100} points</strong></span><span>Draw<strong>{draw?.draw_at ? new Date(draw.draw_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Sunday, 8 PM"}</strong></span></div>
+          {error && <p className="auth-error">{error}</p>}
+          <button type="button" className="primary-button" disabled={selected.length !== pickCount || saving} onClick={saveTicket}>{saving ? "Saving ticket…" : saved ? "Ticket saved" : "Save ticket"}</button>
           {saved && <button type="button" className="text-button" onClick={() => onNavigate("player-tickets")}>View my tickets →</button>}
         </aside>
       </div>
@@ -320,20 +352,32 @@ function PlayerTickets({ tickets, onNavigate, onLogout }) {
   );
 }
 
-function RouletteGame({ onNavigate, onLogout }) {
+function RouletteGame({ onNavigate, onLogout, onSpin }) {
   const [choice, setChoice] = useState("");
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
   const spin = () => {
     if (!choice || spinning) return;
     setSpinning(true);
     setResult(null);
-    window.setTimeout(() => {
-      const number = rouletteNumbers[Math.floor(Math.random() * rouletteNumbers.length)];
-      const color = number === 0 ? "Green" : redRouletteNumbers.has(number) ? "Red" : "Black";
-      const won = choice === color || (choice === "Even" && number !== 0 && number % 2 === 0) || (choice === "Odd" && number % 2 === 1);
-      setResult({ number, color, won });
-      setSpinning(false);
+    setError("");
+    window.setTimeout(async () => {
+      try {
+        const backendResult = await onSpin(choice);
+        if (backendResult) {
+          setResult(backendResult);
+          return;
+        }
+        const number = rouletteNumbers[Math.floor(Math.random() * rouletteNumbers.length)];
+        const color = number === 0 ? "Green" : redRouletteNumbers.has(number) ? "Red" : "Black";
+        const won = choice === color || (choice === "Even" && number !== 0 && number % 2 === 0) || (choice === "Odd" && number % 2 === 1);
+        setResult({ number, color, won });
+      } catch (spinError) {
+        setError(spinError.message || "Unable to complete this demo spin.");
+      } finally {
+        setSpinning(false);
+      }
     }, 1800);
   };
   return (
@@ -351,8 +395,9 @@ function RouletteGame({ onNavigate, onLogout }) {
         <aside className="content-card roulette-controls">
           <span className="game-kicker"><Icon name="game" size={18}/>Place a demo choice</span>
           <h2>Choose one option</h2><p>This game uses demo points only—no deposits or cash-out.</p>
-          <div className="roulette-choices">{["Red", "Black", "Even", "Odd"].map((item) => <button type="button" key={item} className={`${item.toLowerCase()} ${choice === item ? "selected" : ""}`} onClick={() => { setChoice(item); setResult(null); }}>{item}</button>)}</div>
+          <div className="roulette-choices">{["Red", "Black", "Even", "Odd"].map((item) => <button type="button" key={item} className={`${item.toLowerCase()} ${choice === item ? "selected" : ""}`} onClick={() => { setChoice(item); setResult(null); setError(""); }}>{item}</button>)}</div>
           <div className="demo-stake"><span>Demo stake</span><strong>50 points</strong></div>
+          {error && <p className="auth-error">{error}</p>}
           <button type="button" className="primary-button" disabled={!choice || spinning} onClick={spin}>{spinning ? "Spinning…" : "Spin roulette"}</button>
           <button type="button" className="text-button" onClick={() => onNavigate("player-lottery")}>Back to main lottery</button>
         </aside>
@@ -536,23 +581,90 @@ export default function App() {
     }
     return "player-login";
   });
-  const [mobile, setMobile] = useState("");
+  const [playerEmail, setPlayerEmail] = useState("");
   const [playerTickets, setPlayerTickets] = useState(initialPlayerTickets);
+  const [featuredDraw, setFeaturedDraw] = useState(null);
+  const [walletPoints, setWalletPoints] = useState(2450);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [screen]);
 
-  const logout = () => { setMobile(""); setScreen("player-login"); };
-  const savePlayerTicket = (numbers) => setPlayerTickets((current) => [{ id: `RW786-${String(Date.now()).slice(-6)}`, numbers, draw: "RoyalWin Super 7", status: "Upcoming" }, ...current]);
+  useEffect(() => {
+    if (!isSupabaseConfigured) return undefined;
+    let cancelled = false;
+    const restoreSession = async () => {
+      try {
+        const identity = await getCurrentIdentity();
+        if (!identity || cancelled) return;
+        if (identity.profile.role === "admin") {
+          setScreen("admin-dashboard");
+          return;
+        }
+        const [draw, tickets, wallet] = await Promise.all([
+          getFeaturedLotteryDraw(), getPlayerTickets(), getPlayerWallet(),
+        ]);
+        if (!cancelled) {
+          setFeaturedDraw(draw);
+          setPlayerTickets(tickets);
+          setWalletPoints(Number(wallet.points_balance));
+          setScreen("player-dashboard");
+        }
+      } catch {
+        // Keep the public login visible if a stored session is expired or incomplete.
+      }
+    };
+    restoreSession();
+    return () => { cancelled = true; };
+  }, []);
 
-  if (screen === "player-login") return <PlayerLogin mobile={mobile} setMobile={setMobile} onContinue={() => setScreen("player-mpin")} onRegister={() => { setMobile("9769980248"); setScreen("player-mpin"); }} onAdmin={() => setScreen("admin-login")}/>;
-  if (screen === "player-mpin") return <PlayerMpinLogin mobile={mobile} onBack={() => setScreen("player-login")} onLogin={() => setScreen("player-dashboard")}/>;
-  if (screen === "admin-login") return <AdminLogin onBack={() => setScreen("player-login")} onLogin={() => setScreen("admin-dashboard")}/>;
-  if (screen === "player-dashboard") return <PlayerDashboard tickets={playerTickets} onNavigate={setScreen} onLogout={logout}/>;
-  if (screen === "player-lottery") return <LotteryGame onNavigate={setScreen} onLogout={logout} onSave={savePlayerTicket}/>;
+  const requestMagicLink = async () => {
+    if (isSupabaseConfigured) {
+      const redirectTo = new URL(`${process.env.PUBLIC_URL || ""}/`, window.location.origin).toString();
+      await requestPlayerMagicLink(playerEmail, redirectTo);
+      setScreen("player-email-sent");
+      return;
+    }
+    setScreen("player-dashboard");
+  };
+  const adminLogin = async ({ userId, password }) => {
+    if (isSupabaseConfigured) await signInAdmin(userId, password);
+    setScreen("admin-dashboard");
+  };
+  const logout = async () => {
+    try { if (isSupabaseConfigured) await signOut(); }
+    finally {
+      setPlayerEmail("");
+      setFeaturedDraw(null);
+      setPlayerTickets(initialPlayerTickets);
+      setWalletPoints(2450);
+      setScreen("player-login");
+    }
+  };
+  const savePlayerTicket = async (numbers) => {
+    if (isSupabaseConfigured) {
+      if (!featuredDraw?.id) throw new Error("No open lottery draw is available.");
+      await purchaseLotteryTicket(featuredDraw.id, numbers);
+      const [tickets, wallet] = await Promise.all([getPlayerTickets(), getPlayerWallet()]);
+      setPlayerTickets(tickets);
+      setWalletPoints(Number(wallet.points_balance));
+      return;
+    }
+    setPlayerTickets((current) => [{ id: `RW786-${String(Date.now()).slice(-6)}`, numbers, draw: "RoyalWin Super 7", status: "Upcoming" }, ...current]);
+    setWalletPoints((current) => Math.max(0, current - 100));
+  };
+  const playRouletteRound = async (choice) => {
+    if (isSupabaseConfigured) return playDemoRoulette(choice);
+    return null;
+  };
+
+  if (screen === "player-login") return <PlayerLogin email={playerEmail} setEmail={setPlayerEmail} onContinue={requestMagicLink} onRegister={requestMagicLink} onAdmin={() => setScreen("admin-login")} backendEnabled={isSupabaseConfigured}/>;
+  if (screen === "player-email-sent") return <PlayerEmailSent email={playerEmail} onBack={() => setScreen("player-login")} onResend={requestMagicLink} backendEnabled={isSupabaseConfigured}/>;
+  if (screen === "admin-login") return <AdminLogin onBack={() => setScreen("player-login")} onLogin={adminLogin} backendEnabled={isSupabaseConfigured}/>;
+  if (screen === "player-dashboard") return <PlayerDashboard tickets={playerTickets} walletPoints={walletPoints} onNavigate={setScreen} onLogout={logout}/>;
+  if (screen === "player-lottery") return <LotteryGame onNavigate={setScreen} onLogout={logout} onSave={savePlayerTicket} draw={featuredDraw}/>;
   if (screen === "player-tickets") return <PlayerTickets tickets={playerTickets} onNavigate={setScreen} onLogout={logout}/>;
-  if (screen === "player-roulette") return <RouletteGame onNavigate={setScreen} onLogout={logout}/>;
+  if (screen === "player-roulette") return <RouletteGame onNavigate={setScreen} onLogout={logout} onSpin={playRouletteRound}/>;
   if (screen === "stock") return <StockScreen onBack={() => setScreen("admin-dashboard")}/>;
   if (screen === "orders") return <OrdersScreen onBack={() => setScreen("admin-dashboard")}/>;
   return <Dashboard onNavigate={setScreen} onLogout={logout}/>;
