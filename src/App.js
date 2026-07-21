@@ -1,6 +1,17 @@
 import { useEffect, useState } from "react";
 import { isSupabaseConfigured } from "./lib/supabase";
-import { getCurrentIdentity, requestPlayerMagicLink, signInAdmin, signOut } from "./services/authService";
+import {
+  getCurrentIdentity,
+  registerPlayer,
+  requestPasswordReset,
+  resendRegistrationOtp,
+  signInAdmin,
+  signInPlayer,
+  signOut,
+  subscribeToAuthChanges,
+  updateRecoveredPassword,
+  verifyRegistrationOtp,
+} from "./services/authService";
 import {
   adjustPlayerPoints,
   cancelLotteryDraw,
@@ -75,6 +86,13 @@ const ticketStatusLabel = (status) => ({
 const isPreviewMode = process.env.NODE_ENV === "development"
   && new URLSearchParams(window.location.search).has("screen");
 const liveBackendActive = isSupabaseConfigured && !isPreviewMode;
+const recoveryModeRequested = new URLSearchParams(window.location.search).get("recovery") === "1";
+
+const getAuthRedirectUrl = (recovery = false) => {
+  const url = new URL(`${process.env.PUBLIC_URL || ""}/`, window.location.origin);
+  if (recovery) url.searchParams.set("recovery", "1");
+  return url.toString();
+};
 
 function Icon({ name, size = 24, strokeWidth = 1.8 }) {
   const common = {
@@ -155,15 +173,26 @@ function Brand({ showVersion = false }) {
   );
 }
 
-function PlayerLogin({ email, setEmail, onContinue, onRegister, onAdmin, backendEnabled }) {
+function AuthField({ label, prefix, ...inputProps }) {
+  return (
+    <label className="auth-field">
+      <span className="auth-field-label">{label}</span>
+      <span className="auth-field-control"><b>{prefix}</b><input {...inputProps}/></span>
+    </label>
+  );
+}
+
+function PlayerLogin({ identifier, setIdentifier, onLogin, onRegister, onForgot, onAdmin, backendEnabled, notice }) {
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const submit = async (action) => {
+  const valid = identifier.trim().length >= 8 && password.length >= 8;
+  const submit = async (event) => {
+    event.preventDefault();
     if (!valid || loading) return;
     setLoading(true);
     setError("");
-    try { await action(); } catch (requestError) { setError(requestError.message || "Unable to send the sign-in email."); }
+    try { await onLogin({ identifier, password }); } catch (requestError) { setError(requestError.message || "Unable to sign in."); }
     finally { setLoading(false); }
   };
   return (
@@ -171,48 +200,170 @@ function PlayerLogin({ email, setEmail, onContinue, onRegister, onAdmin, backend
       <div className="otp-screen player-login-screen">
         <button type="button" className="admin-access-link" onClick={onAdmin}><Icon name="lock" size={16}/>Admin Login</button>
         <Brand />
-        <section className="auth-card otp-card">
+        <form className="auth-card otp-card player-password-card" onSubmit={submit}>
           <span className={`backend-mode-badge ${backendEnabled ? "live" : "demo"}`}>{backendEnabled ? "Live secure login" : "Frontend demo mode"}</span>
-          <div className="auth-card-heading"><span>Players &amp; users</span><h2>Play with RoyalWin786</h2><p>Enter your email address to access lottery tickets, results and games.</p></div>
-          <label className="email-input">
-            <strong>@</strong><span/><input type="email" value={email} autoComplete="email" placeholder="Enter email address" onChange={(event) => setEmail(event.target.value)}/>
-          </label>
+          <div className="auth-card-heading"><span>Players &amp; users</span><h2>Welcome back</h2><p>Log in with your registered email address or mobile number.</p></div>
+          {notice && <p className="auth-success">{notice}</p>}
+          <AuthField label="Email or mobile number" prefix="@" value={identifier} autoComplete="username" placeholder="name@email.com or +91 mobile" onChange={(event) => setIdentifier(event.target.value)}/>
+          <AuthField label="Password" prefix={<Icon name="lock" size={18}/>} type="password" value={password} autoComplete="current-password" placeholder="Enter your password" onChange={(event) => setPassword(event.target.value)}/>
+          <button type="button" className="forgot-password-link" onClick={onForgot}>Forgot password?</button>
           {error && <p className="auth-error">{error}</p>}
-          <button type="button" className="primary-button" disabled={!valid || loading} onClick={() => submit(onContinue)}>{loading ? "Sending…" : "Send secure sign-in link"}</button>
-          <button type="button" className="text-button" onClick={() => submit(onRegister)}>New player? <strong>Create account</strong></button>
-          <p className="secure-note"><Icon name="shield" size={16}/>Your login is protected with secure verification.</p>
-        </section>
+          <button type="submit" className="primary-button" disabled={!valid || loading}>{loading ? "Signing in…" : "Login to Player Lobby"}</button>
+          <div className="auth-divider"><span>New to RoyalWin786?</span></div>
+          <button type="button" className="secondary-auth-button" onClick={onRegister}>Create player account</button>
+          <p className="secure-note"><Icon name="shield" size={16}/>Passwords are securely handled by Supabase Auth.</p>
+        </form>
       </div>
     </AppFrame>
   );
 }
 
-function PlayerEmailSent({ email, onBack, onResend, backendEnabled }) {
+function PlayerRegistration({ initial, onBack, onRegister, backendEnabled }) {
+  const [form, setForm] = useState({ name: initial.name || "", email: initial.email || "", phone: initial.phone || "", age: initial.age || "", password: "", confirmPassword: "", accepted: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const resend = async () => {
-    if (loading) return;
+  const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  const valid = form.name.trim().length >= 2
+    && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
+    && form.phone.replace(/\D/g, "").length >= 10
+    && Number(form.age) >= 18
+    && form.password.length >= 8
+    && form.password === form.confirmPassword
+    && form.accepted;
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!valid || loading) return;
     setLoading(true);
     setError("");
-    try { await onResend(); } catch (resendError) { setError(resendError.message || "Unable to resend the sign-in email."); }
+    try { await onRegister(form); } catch (registrationError) { setError(registrationError.message || "Unable to create your account."); }
     finally { setLoading(false); }
   };
+  return (
+    <AppFrame className="auth-frame registration-auth-frame">
+      <div className="otp-screen registration-screen">
+        <Brand />
+        <form className="auth-card registration-card" onSubmit={submit}>
+          <button type="button" className="auth-back-link" onClick={onBack}>← Back to login</button>
+          <span className={`backend-mode-badge ${backendEnabled ? "live" : "demo"}`}>{backendEnabled ? "Secure registration" : "Frontend demo mode"}</span>
+          <div className="auth-card-heading"><span>New player</span><h2>Create your RoyalWin786 account</h2><p>Register once, verify your email OTP, then log in using your email or mobile number.</p></div>
+          <div className="registration-grid">
+            <AuthField label="Full name" prefix={<Icon name="user" size={18}/>} value={form.name} autoComplete="name" placeholder="Your full name" onChange={(event) => update("name", event.target.value)}/>
+            <AuthField label="Email address" prefix="@" type="email" value={form.email} autoComplete="email" placeholder="name@email.com" onChange={(event) => update("email", event.target.value)}/>
+            <AuthField label="Mobile number" prefix="+91" type="tel" value={form.phone} autoComplete="tel" inputMode="tel" placeholder="98765 43210" onChange={(event) => update("phone", event.target.value)}/>
+            <AuthField label="Age" prefix="18+" type="number" min="18" max="100" value={form.age} inputMode="numeric" placeholder="Your age" onChange={(event) => update("age", event.target.value)}/>
+            <AuthField label="Password" prefix={<Icon name="lock" size={18}/>} type="password" value={form.password} autoComplete="new-password" placeholder="8+ characters" onChange={(event) => update("password", event.target.value)}/>
+            <AuthField label="Confirm password" prefix={<Icon name="lock" size={18}/>} type="password" value={form.confirmPassword} autoComplete="new-password" placeholder="Repeat password" onChange={(event) => update("confirmPassword", event.target.value)}/>
+          </div>
+          {form.confirmPassword && form.password !== form.confirmPassword && <p className="auth-error">Passwords do not match.</p>}
+          <label className="age-consent"><input type="checkbox" checked={form.accepted} onChange={(event) => update("accepted", event.target.checked)}/><span>I confirm that I am at least 18 years old and accept the platform terms.</span></label>
+          {error && <p className="auth-error">{error}</p>}
+          <button type="submit" className="primary-button" disabled={!valid || loading}>{loading ? "Creating account…" : "Create account & send OTP"}</button>
+          <p className="secure-note"><Icon name="shield" size={16}/>Your password is never stored in the RoyalWin786 public database.</p>
+        </form>
+      </div>
+    </AppFrame>
+  );
+}
 
+function RegistrationOtp({ email, onBack, onVerify, onResend, backendEnabled }) {
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!/^\d{6}$/.test(otp) || loading) return;
+    setLoading(true);
+    setError("");
+    try { await onVerify(otp); } catch (verificationError) { setError(verificationError.message || "The OTP is invalid or expired."); }
+    finally { setLoading(false); }
+  };
+  const resend = async () => {
+    if (resending) return;
+    setResending(true);
+    setError("");
+    setNotice("");
+    try { await onResend(); setNotice("A new OTP has been sent to your email."); } catch (resendError) { setError(resendError.message || "Unable to resend OTP."); }
+    finally { setResending(false); }
+  };
   return (
     <AppFrame className="auth-frame">
       <div className="mpin-screen">
         <Brand showVersion />
-        <section className="auth-card mpin-card">
-          <button type="button" className="auth-back-link" onClick={onBack}>← Change email address</button>
-          <span className={`backend-mode-badge ${backendEnabled ? "live" : "demo"}`}>{backendEnabled ? "Secure email link" : "Frontend demo mode"}</span>
-          <div className="auth-card-heading"><span>Player verification</span><h2>Check your inbox</h2><p>We sent a secure sign-in link to <strong>{email || "player@example.com"}</strong>. Open that email and tap “Sign in” to enter your Player Lobby.</p></div>
-          <div className="email-sent-icon"><Icon name="shield" size={34}/></div>
+        <form className="auth-card mpin-card verification-card" onSubmit={submit}>
+          <button type="button" className="auth-back-link" onClick={onBack}>← Change registration details</button>
+          <span className={`backend-mode-badge ${backendEnabled ? "live" : "demo"}`}>{backendEnabled ? "Email OTP verification" : "Frontend demo mode"}</span>
+          <div className="auth-card-heading"><span>Verify your email</span><h2>Enter the 6-digit OTP</h2><p>We sent a verification code to <strong>{email || "your email"}</strong>.</p></div>
+          <label className="otp-code-field"><span>One-time password</span><input value={otp} maxLength="6" inputMode="numeric" autoComplete="one-time-code" placeholder="••••••" onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}/></label>
+          {notice && <p className="auth-success">{notice}</p>}
           {error && <p className="auth-error">{error}</p>}
-          <button type="button" className="primary-button" disabled={loading} onClick={resend}>{loading ? "Sending…" : "Resend sign-in email"}</button>
-          <p className="secure-note"><Icon name="shield" size={16}/>For security, use the newest link received in your inbox.</p>
-        </section>
+          <button type="submit" className="primary-button" disabled={otp.length !== 6 || loading}>{loading ? "Verifying…" : "Verify & enter Player Lobby"}</button>
+          <button type="button" className="text-button" disabled={resending} onClick={resend}>{resending ? "Sending…" : "Didn't receive it? Resend OTP"}</button>
+          <p className="secure-note"><Icon name="shield" size={16}/>Never share this verification code with anyone.</p>
+        </form>
       </div>
     </AppFrame>
+  );
+}
+
+function ForgotPassword({ email, setEmail, onBack, onSend, backendEnabled }) {
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!valid || loading) return;
+    setLoading(true);
+    setError("");
+    try { await onSend(); setSent(true); } catch (sendError) { setError(sendError.message || "Unable to send the password reset email."); }
+    finally { setLoading(false); }
+  };
+  return (
+    <AppFrame className="auth-frame">
+      <div className="mpin-screen"><Brand showVersion />
+        <form className="auth-card mpin-card" onSubmit={submit}>
+          <button type="button" className="auth-back-link" onClick={onBack}>← Back to login</button>
+          <span className={`backend-mode-badge ${backendEnabled ? "live" : "demo"}`}>{backendEnabled ? "Secure account recovery" : "Frontend demo mode"}</span>
+          <div className="auth-card-heading"><span>Forgot password</span><h2>Recover your account</h2><p>Enter your registered email. We will send a secure password reset link.</p></div>
+          <AuthField label="Registered email" prefix="@" type="email" value={email} autoComplete="email" placeholder="name@email.com" onChange={(event) => setEmail(event.target.value)}/>
+          {sent && <p className="auth-success">Password reset email sent. Open the newest link in your inbox.</p>}
+          {error && <p className="auth-error">{error}</p>}
+          <button type="submit" className="primary-button" disabled={!valid || loading}>{loading ? "Sending…" : sent ? "Resend reset link" : "Send password reset link"}</button>
+          <p className="secure-note"><Icon name="shield" size={16}/>For privacy, the same confirmation is shown for every valid email format.</p>
+        </form>
+      </div>
+    </AppFrame>
+  );
+}
+
+function ResetPassword({ onSave }) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const valid = password.length >= 8 && /[A-Za-z]/.test(password) && /\d/.test(password) && password === confirmPassword;
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!valid || loading) return;
+    setLoading(true);
+    setError("");
+    try { await onSave(password); } catch (saveError) { setError(saveError.message || "Unable to update your password. Open a fresh reset link and try again."); }
+    finally { setLoading(false); }
+  };
+  return (
+    <AppFrame className="auth-frame"><div className="mpin-screen"><Brand showVersion />
+      <form className="auth-card mpin-card" onSubmit={submit}>
+        <span className="backend-mode-badge live">Secure password update</span>
+        <div className="auth-card-heading"><span>Account recovery</span><h2>Create a new password</h2><p>Use at least 8 characters with a letter and number.</p></div>
+        <AuthField label="New password" prefix={<Icon name="lock" size={18}/>} type="password" value={password} autoComplete="new-password" placeholder="Enter new password" onChange={(event) => setPassword(event.target.value)}/>
+        <AuthField label="Confirm new password" prefix={<Icon name="lock" size={18}/>} type="password" value={confirmPassword} autoComplete="new-password" placeholder="Repeat new password" onChange={(event) => setConfirmPassword(event.target.value)}/>
+        {confirmPassword && password !== confirmPassword && <p className="auth-error">Passwords do not match.</p>}
+        {error && <p className="auth-error">{error}</p>}
+        <button type="submit" className="primary-button" disabled={!valid || loading}>{loading ? "Updating…" : "Update password"}</button>
+      </form>
+    </div></AppFrame>
   );
 }
 
@@ -654,14 +805,18 @@ function Countdown({ target }) {
 
 export default function App() {
   const [screen, setScreen] = useState(() => {
+    if (recoveryModeRequested && liveBackendActive) return "player-reset-password";
     if (process.env.NODE_ENV === "development") {
       const previewScreen = new URLSearchParams(window.location.search).get("screen");
-      const allowedPreviews = ["player-login", "player-dashboard", "player-lottery", "player-tickets", "player-results", "player-wallet", "player-roulette", "admin-login", "admin-dashboard"];
+      const allowedPreviews = ["player-login", "player-register", "player-register-otp", "player-forgot-password", "player-reset-password", "player-dashboard", "player-lottery", "player-tickets", "player-results", "player-wallet", "player-roulette", "admin-login", "admin-dashboard"];
       if (allowedPreviews.includes(previewScreen)) return previewScreen;
     }
     return "player-login";
   });
-  const [playerEmail, setPlayerEmail] = useState("");
+  const [playerIdentifier, setPlayerIdentifier] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [pendingRegistration, setPendingRegistration] = useState({ name: "", email: "", phone: "", age: "" });
+  const [authNotice, setAuthNotice] = useState("");
   const [playerProfile, setPlayerProfile] = useState({ display_name: "RoyalWin player", email: "player@example.com" });
   const [playerTickets, setPlayerTickets] = useState(initialPlayerTickets);
   const [featuredDraw, setFeaturedDraw] = useState(liveBackendActive ? null : demoDraw);
@@ -709,6 +864,10 @@ export default function App() {
       try {
         const identity = await getCurrentIdentity();
         if (!identity || cancelled) return;
+        if (recoveryModeRequested) {
+          setScreen("player-reset-password");
+          return;
+        }
         if (identity.profile.role === "admin") {
           await loadAdminPortalData();
           if (cancelled) return;
@@ -718,7 +877,7 @@ export default function App() {
         await loadPlayerPortalData();
         if (!cancelled) {
           setPlayerProfile(identity.profile);
-          setPlayerEmail(identity.profile.email || "");
+          setPlayerIdentifier(identity.profile.email || "");
           setScreen("player-dashboard");
         }
       } catch {
@@ -729,15 +888,59 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  const requestMagicLink = async () => {
+  useEffect(() => {
+    if (!liveBackendActive) return undefined;
+    return subscribeToAuthChanges((event) => {
+      if (event === "PASSWORD_RECOVERY") setScreen("player-reset-password");
+    });
+  }, []);
+
+  const registerNewPlayer = async (form) => {
+    const redirectTo = getAuthRedirectUrl();
     if (liveBackendActive) {
-      const redirectTo = new URL(`${process.env.PUBLIC_URL || ""}/`, window.location.origin).toString();
-      await requestPlayerMagicLink(playerEmail, redirectTo);
-      setScreen("player-email-sent");
-      return;
+      const result = await registerPlayer({ ...form, redirectTo });
+      if (result.session) throw new Error("Email confirmation must be enabled in Supabase before player registration can be used.");
     }
-    setPlayerProfile({ display_name: "Demo player", email: playerEmail });
+    setPendingRegistration({ name: form.name.trim(), email: form.email.trim().toLowerCase(), phone: form.phone, age: form.age });
+    setPlayerIdentifier(form.email.trim().toLowerCase());
+    setScreen("player-register-otp");
+  };
+  const verifyPlayerOtp = async (otp) => {
+    if (liveBackendActive) {
+      const identity = await verifyRegistrationOtp(pendingRegistration.email, otp);
+      await loadPlayerPortalData();
+      setPlayerProfile(identity.profile);
+    } else {
+      setPlayerProfile({ display_name: pendingRegistration.name || "Demo player", email: pendingRegistration.email || "player@example.com", phone: pendingRegistration.phone, age: Number(pendingRegistration.age) });
+    }
     setScreen("player-dashboard");
+  };
+  const resendPlayerOtp = async () => {
+    if (liveBackendActive) await resendRegistrationOtp(pendingRegistration.email, getAuthRedirectUrl());
+  };
+  const playerLogin = async ({ identifier, password }) => {
+    if (liveBackendActive) {
+      const identity = await signInPlayer(identifier, password);
+      await loadPlayerPortalData();
+      setPlayerProfile(identity.profile);
+    } else {
+      setPlayerProfile({ display_name: "Demo player", email: identifier.includes("@") ? identifier : "player@example.com", phone: identifier.includes("@") ? "" : identifier });
+    }
+    setAuthNotice("");
+    setScreen("player-dashboard");
+  };
+  const sendPasswordRecovery = async () => {
+    if (liveBackendActive) await requestPasswordReset(recoveryEmail, getAuthRedirectUrl(true));
+  };
+  const saveRecoveredPassword = async (password) => {
+    if (liveBackendActive) {
+      await updateRecoveredPassword(password);
+      await signOut();
+    }
+    const cleanUrl = new URL(`${process.env.PUBLIC_URL || ""}/`, window.location.origin);
+    window.history.replaceState({}, document.title, cleanUrl.toString());
+    setAuthNotice("Password updated successfully. Log in with your new password.");
+    setScreen("player-login");
   };
   const adminLogin = async ({ userId, password }) => {
     if (liveBackendActive) {
@@ -749,7 +952,10 @@ export default function App() {
   const logout = async () => {
     try { if (liveBackendActive) await signOut(); }
     finally {
-      setPlayerEmail("");
+      setPlayerIdentifier("");
+      setRecoveryEmail("");
+      setPendingRegistration({ name: "", email: "", phone: "", age: "" });
+      setAuthNotice("");
       setPlayerProfile({ display_name: "RoyalWin player", email: "player@example.com" });
       setFeaturedDraw(liveBackendActive ? null : demoDraw);
       setLotteryDraws(liveBackendActive ? [] : [demoDraw, demoPublishedDraw]);
@@ -813,8 +1019,11 @@ export default function App() {
     return 0;
   };
 
-  if (screen === "player-login") return <PlayerLogin email={playerEmail} setEmail={setPlayerEmail} onContinue={requestMagicLink} onRegister={requestMagicLink} onAdmin={() => setScreen("admin-login")} backendEnabled={liveBackendActive}/>;
-  if (screen === "player-email-sent") return <PlayerEmailSent email={playerEmail} onBack={() => setScreen("player-login")} onResend={requestMagicLink} backendEnabled={liveBackendActive}/>;
+  if (screen === "player-login") return <PlayerLogin identifier={playerIdentifier} setIdentifier={setPlayerIdentifier} onLogin={playerLogin} onRegister={() => { setPendingRegistration({ name: "", email: "", phone: "", age: "" }); setScreen("player-register"); }} onForgot={() => { setRecoveryEmail(playerIdentifier.includes("@") ? playerIdentifier : ""); setScreen("player-forgot-password"); }} onAdmin={() => setScreen("admin-login")} backendEnabled={liveBackendActive} notice={authNotice}/>;
+  if (screen === "player-register") return <PlayerRegistration initial={pendingRegistration} onBack={() => setScreen("player-login")} onRegister={registerNewPlayer} backendEnabled={liveBackendActive}/>;
+  if (screen === "player-register-otp") return <RegistrationOtp email={pendingRegistration.email} onBack={() => setScreen("player-register")} onVerify={verifyPlayerOtp} onResend={resendPlayerOtp} backendEnabled={liveBackendActive}/>;
+  if (screen === "player-forgot-password") return <ForgotPassword email={recoveryEmail} setEmail={setRecoveryEmail} onBack={() => setScreen("player-login")} onSend={sendPasswordRecovery} backendEnabled={liveBackendActive}/>;
+  if (screen === "player-reset-password") return <ResetPassword onSave={saveRecoveredPassword}/>;
   if (screen === "admin-login") return <AdminLogin onBack={() => setScreen("player-login")} onLogin={adminLogin} backendEnabled={liveBackendActive}/>;
   if (screen === "player-dashboard") return <PlayerDashboard profile={playerProfile} tickets={playerTickets} walletPoints={walletPoints} draw={featuredDraw} latestResult={lotteryDraws.find((draw) => draw.status === "published")} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-lottery") return <LotteryGame onNavigate={setScreen} onLogout={logout} onSave={savePlayerTicket} draw={featuredDraw}/>;
@@ -823,5 +1032,5 @@ export default function App() {
   if (screen === "player-wallet") return <PlayerWallet profile={playerProfile} walletPoints={walletPoints} ledger={walletLedger} settings={playSettings} onSaveSettings={savePlaySettings} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-roulette") return <RouletteGame onNavigate={setScreen} onLogout={logout} onSpin={playRouletteRound}/>;
   if (screen === "admin-dashboard") return <AdminConsole data={adminData} onCreateDraw={adminCreateDraw} onOpenDraw={adminOpenDraw} onCancelDraw={adminCancelDraw} onPublishResult={adminPublishResult} onAdjustPoints={adminAdjustPoints} onRefresh={loadAdminPortalData} onLogout={logout}/>;
-  return <PlayerLogin email={playerEmail} setEmail={setPlayerEmail} onContinue={requestMagicLink} onRegister={requestMagicLink} onAdmin={() => setScreen("admin-login")} backendEnabled={liveBackendActive}/>;
+  return <PlayerLogin identifier={playerIdentifier} setIdentifier={setPlayerIdentifier} onLogin={playerLogin} onRegister={() => { setPendingRegistration({ name: "", email: "", phone: "", age: "" }); setScreen("player-register"); }} onForgot={() => { setRecoveryEmail(playerIdentifier.includes("@") ? playerIdentifier : ""); setScreen("player-forgot-password"); }} onAdmin={() => setScreen("admin-login")} backendEnabled={liveBackendActive} notice={authNotice}/>;
 }
