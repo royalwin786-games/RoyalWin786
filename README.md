@@ -4,7 +4,7 @@ Original responsive RoyalWin786 player and admin platform built with React. The 
 
 ## Included flows
 
-- Player-first mobile-number and MPIN login
+- Player-first passwordless email-link login with a separate admin login
 - Separate restricted admin credential login
 - Responsive player lobby with desktop navigation and mobile app tabs
 - RoyalWin Super 7 number picker and demo ticket history
@@ -21,4 +21,16 @@ npm install
 npm start
 ```
 
-The current project is a front-end experience. Production authentication, OTP delivery, live draws, balances, ticket purchase, roulette settlement, stock operations, age checks, responsible-play controls, and ticket verification still require a secure backend/API and the applicable regulatory approvals.
+## Supabase backend
+
+The repository includes an optional Supabase PostgreSQL backend scaffold with:
+
+- Passwordless email-link and admin password authentication services
+- Player/admin profiles and role enforcement
+- Draws, lottery tickets, points wallets, immutable ledger entries, responsible-play settings, audit events, and demo roulette history
+- Row Level Security policies for player-owned data and admin-only operations
+- A transactional `purchase_lottery_ticket` database function
+
+Follow [`supabase/README.md`](supabase/README.md), then copy `.env.example` to `.env.local`. Until `REACT_APP_ENABLE_LIVE_BACKEND=true` and valid Supabase values are configured, the interface stays in clearly labelled frontend demo mode.
+
+Payments, cash withdrawal, KYC, production roulette settlement, result publication, regulatory enforcement, and service-role operations must remain in a trusted backend or Edge Function and require the applicable approvals.

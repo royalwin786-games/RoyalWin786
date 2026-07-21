@@ -1,0 +1,10 @@
+project_id = "royalwin786"
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://royalwin786-games.github.io/RoyalWin786/"]
+enable_signup = true
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = true
