@@ -424,7 +424,7 @@ insert into public.draws (
   code, name, game_type, status, draw_at, closes_at, max_number, picks_required, entry_points, prize_label
 ) values (
   'RW-S7-042', 'RoyalWin Super 7', 'lottery', 'open', now() + interval '7 days',
-  now() + interval '6 days 23 hours', 36, 6, 100, '₹25,00,000'
+  now() + interval '6 days 23 hours', 36, 6, 100, '2,50,000 reward points'
 )
 on conflict (code) do update set
   name = excluded.name,

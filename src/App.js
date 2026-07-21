@@ -1,29 +1,80 @@
 import { useEffect, useState } from "react";
 import { isSupabaseConfigured } from "./lib/supabase";
 import { getCurrentIdentity, requestPlayerMagicLink, signInAdmin, signOut } from "./services/authService";
-import { getFeaturedLotteryDraw, getPlayerTickets, getPlayerWallet, playDemoRoulette, purchaseLotteryTicket } from "./services/gameService";
-
-const reportItems = [
-  { icon: "chart", label: "Net Sales Report", screen: "orders" },
-  { icon: "money", label: "Sold / Unsold", screen: "orders" },
-  { icon: "clipboard", label: "Stock Summary", screen: "stock" },
-  { icon: "cart", label: "Unsold Entry", screen: "stock" },
-  { icon: "purchase", label: "Purchase Report", screen: "orders" },
-  { icon: "document", label: "Unsold Details", screen: "orders" },
-  { icon: "arrange", label: "Series Arrange", screen: "stock" },
-];
-
-const orderGroups = [
-  { name: "ROYALWIN GOLD WEEKLY DRAW", code: "RW1230", date: "15/01/2026" },
-  { name: "ROYALWIN DIAMOND WEEKLY DRAW", code: "RW1223", date: "15/01/2026" },
-];
+import {
+  adjustPlayerPoints,
+  cancelLotteryDraw,
+  createLotteryDraw,
+  getAdminLotteryData,
+  getFeaturedLotteryDraw,
+  getLotteryDraws,
+  getPlayerTickets,
+  getPlayerWallet,
+  getResponsiblePlaySettings,
+  getWalletLedger,
+  openLotteryDraw,
+  playDemoRoulette,
+  publishLotteryResult,
+  purchaseLotteryTicket,
+  updateResponsiblePlaySettings,
+  verifyLotteryTicket,
+} from "./services/gameService";
 
 const lotteryNumbers = Array.from({ length: 36 }, (_, index) => index + 1);
 const rouletteNumbers = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27];
 const redRouletteNumbers = new Set([32, 19, 21, 25, 34, 27]);
 const initialPlayerTickets = [
-  { id: "RW786-2048", numbers: [4, 7, 12, 18, 24, 31], draw: "RoyalWin Super 7", status: "Upcoming" },
+  { id: "RW786-DEMO01", numbers: [4, 7, 12, 18, 24, 31], matchedNumbers: [], matchCount: 0, prizePoints: 0, pointsSpent: 100, draw: "RoyalWin Super 7", drawCode: "RW-S7-042", status: "confirmed", createdAt: new Date().toISOString() },
+  { id: "RW786-WIN041", numbers: [4, 7, 12, 18, 25, 33], matchedNumbers: [4, 7, 12, 18], matchCount: 4, prizePoints: 2500, pointsSpent: 100, draw: "RoyalWin Super 7", drawCode: "RW-S7-041", drawAt: new Date(Date.now() - 7 * 86400000).toISOString(), resultNumbers: [4, 7, 12, 18, 24, 31], status: "winner", createdAt: new Date(Date.now() - 8 * 86400000).toISOString() },
 ];
+
+const demoDraw = {
+  id: "demo-draw",
+  code: "RW-S7-042",
+  name: "RoyalWin Super 7",
+  status: "open",
+  draw_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+  closes_at: new Date(Date.now() + 6 * 86400000 + 23 * 3600000).toISOString(),
+  max_number: 36,
+  picks_required: 6,
+  entry_points: 100,
+  prize_label: "2,50,000 reward points",
+  result_numbers: null,
+  draw_prize_tiers: [
+    { matches_required: 6, prize_points: 250000, label: "Jackpot" },
+    { matches_required: 5, prize_points: 25000, label: "5 numbers" },
+    { matches_required: 4, prize_points: 2500, label: "4 numbers" },
+    { matches_required: 3, prize_points: 250, label: "3 numbers" },
+  ],
+};
+
+const demoPublishedDraw = {
+  ...demoDraw,
+  id: "demo-result-draw",
+  code: "RW-S7-041",
+  status: "published",
+  draw_at: new Date(Date.now() - 7 * 86400000).toISOString(),
+  closes_at: new Date(Date.now() - 7 * 86400000 - 3600000).toISOString(),
+  result_numbers: [4, 7, 12, 18, 24, 31],
+  published_at: new Date(Date.now() - 7 * 86400000).toISOString(),
+};
+
+const formatDateTime = (value) => value
+  ? new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+  : "Not scheduled";
+
+const formatPoints = (value) => Number(value || 0).toLocaleString("en-IN");
+
+const ticketStatusLabel = (status) => ({
+  confirmed: "Upcoming",
+  winner: "Winner",
+  non_winner: "Result declared",
+  cancelled: "Cancelled",
+}[status] || status || "Upcoming");
+
+const isPreviewMode = process.env.NODE_ENV === "development"
+  && new URLSearchParams(window.location.search).has("screen");
+const liveBackendActive = isSupabaseConfigured && !isPreviewMode;
 
 function Icon({ name, size = 24, strokeWidth = 1.8 }) {
   const common = {
@@ -204,6 +255,8 @@ function PlayerHeader({ active, onNavigate, onLogout }) {
     { label: "Lobby", icon: "home", screen: "player-dashboard" },
     { label: "Lottery", icon: "ticket", screen: "player-lottery" },
     { label: "My Tickets", icon: "document", screen: "player-tickets" },
+    { label: "Results", icon: "trophy", screen: "player-results" },
+    { label: "Wallet", icon: "wallet", screen: "player-wallet" },
     { label: "Roulette", icon: "game", screen: "player-roulette" },
   ];
   return (
@@ -221,8 +274,9 @@ function PlayerBottomMenu({ active, onNavigate }) {
   const items = [
     { label: "Home", icon: "home", screen: "player-dashboard" },
     { label: "Lottery", icon: "ticket", screen: "player-lottery" },
-    { label: "Roulette", icon: "game", screen: "player-roulette" },
     { label: "Tickets", icon: "document", screen: "player-tickets" },
+    { label: "Results", icon: "trophy", screen: "player-results" },
+    { label: "Wallet", icon: "wallet", screen: "player-wallet" },
   ];
   return (
     <nav className="bottom-menu player-bottom-menu" aria-label="Player navigation">
@@ -243,31 +297,33 @@ function PlayerLayout({ active, onNavigate, onLogout, children, className = "" }
   );
 }
 
-function PlayerDashboard({ tickets, walletPoints, onNavigate, onLogout }) {
+function PlayerDashboard({ profile, tickets, walletPoints, draw, latestResult, onNavigate, onLogout }) {
   const latestTicket = tickets[0];
+  const activeTickets = tickets.filter((ticket) => ticket.status === "confirmed").length;
+  const latestNumbers = latestResult?.result_numbers || [];
   return (
     <PlayerLayout active="player-dashboard" onNavigate={onNavigate} onLogout={onLogout}>
-      <div className="player-welcome"><div><span>PLAYER LOBBY</span><h1>Good afternoon, player</h1><p>Your next RoyalWin chance is ready.</p></div><div className="player-points"><Icon name="wallet" size={21}/><span>Points balance<strong>{walletPoints.toLocaleString("en-IN")}</strong></span></div></div>
+      <div className="player-welcome"><div><span>PLAYER LOBBY</span><h1>Welcome, {profile?.display_name || "RoyalWin player"}</h1><p>Your next RoyalWin chance is ready.</p></div><button type="button" className="player-points" onClick={() => onNavigate("player-wallet")}><Icon name="wallet" size={21}/><span>Points balance<strong>{formatPoints(walletPoints)}</strong></span></button></div>
 
       <section className="lottery-hero">
         <div className="lottery-hero-copy">
           <span className="game-kicker"><Icon name="trophy" size={18}/>Main game • Weekly lottery</span>
-          <h2>RoyalWin Super 7</h2>
-          <p>Choose 6 lucky numbers and join the next premium weekly draw.</p>
-          <div className="jackpot-label">Featured jackpot<strong>₹25,00,000</strong></div>
-          <button type="button" onClick={() => onNavigate("player-lottery")}>Choose lottery numbers <span>→</span></button>
+          <h2>{draw?.name || "RoyalWin Super 7"}</h2>
+          <p>Choose {draw?.picks_required || 6} lucky numbers and join the next premium weekly draw.</p>
+          <div className="jackpot-label">Top reward<strong>{draw?.prize_label || "2,50,000 reward points"}</strong></div>
+          <button type="button" disabled={!draw} onClick={() => onNavigate("player-lottery")}>{draw ? "Choose lottery numbers" : "Next draw coming soon"} <span>→</span></button>
         </div>
         <div className="lottery-hero-side">
           <span>Draw closes in</span>
-          <Countdown />
-          <p>Sunday • 08:00 PM</p>
+          <Countdown target={draw?.closes_at}/>
+          <p>{draw ? formatDateTime(draw.draw_at) : "Schedule will be announced"}</p>
         </div>
       </section>
 
       <section className="player-stats" aria-label="Player account summary">
-        <article><span><Icon name="ticket" size={24}/></span><p>Active tickets<strong>{tickets.length}</strong></p></article>
-        <article><span><Icon name="trophy" size={24}/></span><p>Latest result<strong>04 • 12 • 18 • 24 • 31 • 35</strong></p></article>
-        <article><span><Icon name="sparkle" size={24}/></span><p>Reward points<strong>{walletPoints.toLocaleString("en-IN")}</strong></p></article>
+        <article><span><Icon name="ticket" size={24}/></span><p>Active tickets<strong>{activeTickets}</strong></p></article>
+        <article><span><Icon name="trophy" size={24}/></span><p>Latest result<strong>{latestNumbers.length ? latestNumbers.map((number) => String(number).padStart(2, "0")).join(" • ") : "Awaiting result"}</strong></p></article>
+        <article><span><Icon name="sparkle" size={24}/></span><p>Reward points<strong>{formatPoints(walletPoints)}</strong></p></article>
       </section>
 
       <section className="player-section game-lobby-section">
@@ -284,9 +340,9 @@ function PlayerDashboard({ tickets, walletPoints, onNavigate, onLogout }) {
 
       <section className="player-section ticket-preview-section">
         <div className="player-section-heading"><div><span>MY PLAY</span><h2>Latest ticket</h2></div><button type="button" onClick={() => onNavigate("player-tickets")}>View all</button></div>
-        {latestTicket ? <article className="player-ticket-card"><div><span>{latestTicket.status}</span><h3>{latestTicket.draw}</h3><p>Ticket #{latestTicket.id}</p></div><div className="ticket-balls">{latestTicket.numbers.map((number) => <strong key={number}>{String(number).padStart(2, "0")}</strong>)}</div></article> : <p className="empty-state">No tickets yet. Choose your lottery numbers to get started.</p>}
+        {latestTicket ? <article className="player-ticket-card"><div><span className={`status-${latestTicket.status}`}>{ticketStatusLabel(latestTicket.status)}</span><h3>{latestTicket.draw}</h3><p>Ticket #{latestTicket.id}</p></div><div className="ticket-balls">{latestTicket.numbers.map((number) => <strong key={number}>{String(number).padStart(2, "0")}</strong>)}</div></article> : <p className="empty-state">No tickets yet. Choose your lottery numbers to get started.</p>}
       </section>
-      <p className="responsible-note"><Icon name="shield" size={16}/>Demo experience only. Play responsibly and follow local age and gaming regulations.</p>
+      <p className="responsible-note"><Icon name="shield" size={16}/>Points-based experience only. No deposits or cash-out. Play responsibly.</p>
     </PlayerLayout>
   );
 }
@@ -319,7 +375,7 @@ function LotteryGame({ onNavigate, onLogout, onSave, draw }) {
   };
   return (
     <PlayerLayout active="player-lottery" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
-      <div className="game-page-heading"><div><span>MAIN GAME</span><h1>{draw?.name || "RoyalWin Super 7"}</h1><p>Select exactly {pickCount} numbers for the upcoming weekly lottery.</p></div><div><span>Draw closes</span><strong>{draw?.closes_at ? new Date(draw.closes_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Sunday • 08:00 PM"}</strong></div></div>
+      <div className="game-page-heading"><div><span>MAIN GAME</span><h1>{draw?.name || "No open draw"}</h1><p>{draw ? `Select exactly ${pickCount} numbers for the upcoming weekly lottery.` : "The next draw is being prepared by the RoyalWin786 team."}</p></div><div><span>Draw closes</span><strong>{draw ? formatDateTime(draw.closes_at) : "Coming soon"}</strong></div></div>
       <div className="lottery-game-layout">
         <section className="content-card number-picker-card">
           <div className="picker-heading"><div><span>YOUR NUMBERS</span><h2>{selected.length}/{pickCount} selected</h2></div><button type="button" onClick={quickPick}><Icon name="sparkle" size={18}/>Quick Pick</button></div>
@@ -327,27 +383,106 @@ function LotteryGame({ onNavigate, onLogout, onSave, draw }) {
         </section>
         <aside className="content-card ticket-builder-card">
           <span className="game-kicker"><Icon name="ticket" size={18}/>Your lottery ticket</span>
-          <h2>{draw?.name || "RoyalWin Super 7"}</h2><p>Weekly draw • {draw?.code || "RW-S7-042"}</p>
+          <h2>{draw?.name || "RoyalWin Super 7"}</h2><p>Weekly draw • {draw?.code || "Pending"}</p>
           <div className="ticket-balls ticket-balls--large">{Array.from({ length: pickCount }, (_, index) => <strong key={index} className={!selected[index] ? "empty" : ""}>{selected[index] ? String(selected[index]).padStart(2, "0") : "—"}</strong>)}</div>
-          <div className="ticket-meta"><span>Entry<strong>{draw?.entry_points || 100} points</strong></span><span>Draw<strong>{draw?.draw_at ? new Date(draw.draw_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Sunday, 8 PM"}</strong></span></div>
+          <div className="ticket-meta"><span>Entry<strong>{formatPoints(draw?.entry_points || 100)} points</strong></span><span>Draw<strong>{draw ? formatDateTime(draw.draw_at) : "Not scheduled"}</strong></span></div>
+          {draw?.draw_prize_tiers?.length > 0 && <div className="prize-tier-list"><span>Reward tiers</span>{draw.draw_prize_tiers.map((tier) => <p key={tier.matches_required}><strong>{tier.matches_required} matches</strong><b>{formatPoints(tier.prize_points)} pts</b></p>)}</div>}
           {error && <p className="auth-error">{error}</p>}
-          <button type="button" className="primary-button" disabled={selected.length !== pickCount || saving} onClick={saveTicket}>{saving ? "Saving ticket…" : saved ? "Ticket saved" : "Save ticket"}</button>
+          <button type="button" className="primary-button" disabled={!draw || selected.length !== pickCount || saving} onClick={saveTicket}>{saving ? "Confirming ticket…" : saved ? "Ticket confirmed" : `Confirm for ${formatPoints(draw?.entry_points || 100)} points`}</button>
           {saved && <button type="button" className="text-button" onClick={() => onNavigate("player-tickets")}>View my tickets →</button>}
         </aside>
       </div>
-      <p className="responsible-note"><Icon name="shield" size={16}/>No payment or cash-out is connected. Production ticket purchase requires secure backend and regulatory checks.</p>
+      <p className="responsible-note"><Icon name="shield" size={16}/>Reward points have no cash value. Daily play limits are enforced by the secure backend.</p>
     </PlayerLayout>
   );
 }
 
-function PlayerTickets({ tickets, onNavigate, onLogout }) {
+function PlayerTickets({ tickets, onVerify, onNavigate, onLogout }) {
+  const [verifyCode, setVerifyCode] = useState("");
+  const [verification, setVerification] = useState(null);
+  const [verifyError, setVerifyError] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const verify = async (event) => {
+    event.preventDefault();
+    if (!verifyCode.trim() || verifying) return;
+    setVerifying(true);
+    setVerifyError("");
+    setVerification(null);
+    try {
+      const result = await onVerify(verifyCode);
+      if (!result) throw new Error("Ticket not found in your account.");
+      setVerification(result);
+    } catch (error) {
+      setVerifyError(error.message || "Ticket could not be verified.");
+    } finally {
+      setVerifying(false);
+    }
+  };
   return (
     <PlayerLayout active="player-tickets" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
       <div className="game-page-heading"><div><span>MY PLAY</span><h1>My lottery tickets</h1><p>Track saved numbers and upcoming RoyalWin786 draws.</p></div><button type="button" className="heading-action" onClick={() => onNavigate("player-lottery")}>+ New ticket</button></div>
       <section className="ticket-list">
-        {tickets.map((ticket) => <article className="player-ticket-card player-ticket-card--full" key={ticket.id}><div><span>{ticket.status}</span><h3>{ticket.draw}</h3><p>Ticket #{ticket.id} • Sunday, 08:00 PM</p></div><div className="ticket-balls">{ticket.numbers.map((number) => <strong key={number}>{String(number).padStart(2, "0")}</strong>)}</div><button type="button">View ticket</button></article>)}
+        {tickets.length === 0 && <p className="empty-state content-card">No tickets yet. Your confirmed lottery entries will appear here.</p>}
+        {tickets.map((ticket) => <article className={`player-ticket-card player-ticket-card--full ticket-${ticket.status}`} key={ticket.id}><div><span className={`status-${ticket.status}`}>{ticketStatusLabel(ticket.status)}</span><h3>{ticket.draw}</h3><p>Ticket #{ticket.id} • {formatDateTime(ticket.drawAt)}</p></div><div className="ticket-balls">{ticket.numbers.map((number) => <strong className={ticket.matchedNumbers?.includes(number) ? "matched" : ""} key={number}>{String(number).padStart(2, "0")}</strong>)}</div><div className="ticket-outcome"><span>{ticket.pointsSpent ? `${formatPoints(ticket.pointsSpent)} points entry` : "Confirmed entry"}</span>{ticket.status === "winner" && <strong>+{formatPoints(ticket.prizePoints)} points won</strong>}{ticket.status === "non_winner" && <strong>{ticket.matchCount} matches</strong>}</div></article>)}
       </section>
-      <p className="responsible-note"><Icon name="shield" size={16}/>Ticket records shown here are frontend demo data until the player API is connected.</p>
+      <section className="content-card ticket-verifier-card">
+        <div><span>VERIFY</span><h2>Check a ticket code</h2><p>Verification only searches tickets owned by your signed-in account.</p></div>
+        <form onSubmit={verify}><input value={verifyCode} onChange={(event) => setVerifyCode(event.target.value.toUpperCase())} placeholder="RW786-XXXXXXXXXX"/><button type="submit" disabled={!verifyCode.trim() || verifying}>{verifying ? "Checking…" : "Verify ticket"}</button></form>
+        {verifyError && <p className="auth-error">{verifyError}</p>}
+        {verification && <div className="verification-result"><Icon name="shield" size={22}/><div><strong>Verified • {ticketStatusLabel(verification.ticket_status)}</strong><span>{verification.draw_name} • {verification.match_count || 0} matches • {formatPoints(verification.prize_points)} prize points</span></div></div>}
+      </section>
+      <p className="responsible-note"><Icon name="shield" size={16}/>Ticket ownership and results are verified by the RoyalWin786 database.</p>
+    </PlayerLayout>
+  );
+}
+
+function PlayerResults({ draws, tickets, onNavigate, onLogout }) {
+  const published = draws.filter((draw) => draw.status === "published");
+  return (
+    <PlayerLayout active="player-results" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
+      <div className="game-page-heading"><div><span>OFFICIAL RESULTS</span><h1>Lottery result history</h1><p>Published RoyalWin786 draw numbers and your settled tickets.</p></div><button type="button" className="heading-action" onClick={() => onNavigate("player-tickets")}>My tickets</button></div>
+      <section className="result-list">
+        {published.length === 0 && <div className="content-card empty-panel"><Icon name="trophy" size={38}/><h2>No published results yet</h2><p>The first official draw result will appear here after admin publication and automatic settlement.</p></div>}
+        {published.map((draw) => {
+          const playerDrawTickets = tickets.filter((ticket) => ticket.drawCode === draw.code);
+          const wonPoints = playerDrawTickets.reduce((total, ticket) => total + Number(ticket.prizePoints || 0), 0);
+          return <article className="content-card result-card" key={draw.id}><div className="result-card-head"><div><span>PUBLISHED • {draw.code}</span><h2>{draw.name}</h2><p>{formatDateTime(draw.draw_at)}</p></div>{playerDrawTickets.length > 0 && <strong>{playerDrawTickets.length} ticket{playerDrawTickets.length > 1 ? "s" : ""}</strong>}</div><div className="ticket-balls ticket-balls--result">{(draw.result_numbers || []).map((number) => <strong key={number}>{String(number).padStart(2, "0")}</strong>)}</div><div className="result-summary"><span>Your settled entries<strong>{playerDrawTickets.length}</strong></span><span>Your reward<strong>{formatPoints(wonPoints)} points</strong></span></div><div className="result-tiers">{draw.draw_prize_tiers?.map((tier) => <span key={tier.matches_required}>{tier.matches_required} matches <strong>{formatPoints(tier.prize_points)} pts</strong></span>)}</div></article>;
+        })}
+      </section>
+    </PlayerLayout>
+  );
+}
+
+function PlayerWallet({ profile, walletPoints, ledger, settings, onSaveSettings, onNavigate, onLogout }) {
+  const [form, setForm] = useState({
+    dailyPointLimit: settings?.daily_point_limit || 1000,
+    sessionLimitMinutes: settings?.session_limit_minutes || 60,
+  });
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (settings) setForm({ dailyPointLimit: settings.daily_point_limit, sessionLimitMinutes: settings.session_limit_minutes });
+  }, [settings]);
+  const save = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    try {
+      await onSaveSettings(form);
+      setMessage("Play limits updated successfully.");
+    } catch (error) {
+      setMessage(error.message || "Unable to update play limits.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <PlayerLayout active="player-wallet" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
+      <div className="game-page-heading"><div><span>MY ACCOUNT</span><h1>Wallet &amp; play controls</h1><p>{profile?.email || "Player account"}</p></div><div className="wallet-balance-card"><span>Reward points</span><strong>{formatPoints(walletPoints)}</strong></div></div>
+      <div className="wallet-page-grid">
+        <section className="content-card ledger-card"><div className="panel-heading"><span>ACTIVITY</span><h2>Points history</h2></div><div className="ledger-list">{ledger.length === 0 && <p className="empty-state">No points activity yet.</p>}{ledger.map((entry) => <article key={entry.id}><span className={`ledger-icon ${entry.amount >= 0 ? "credit" : "debit"}`}><Icon name={entry.amount >= 0 ? "sparkle" : "ticket"} size={18}/></span><div><strong>{entry.description || entry.reference_type}</strong><small>{formatDateTime(entry.created_at)}</small></div><p className={entry.amount >= 0 ? "credit" : "debit"}>{entry.amount >= 0 ? "+" : ""}{formatPoints(entry.amount)}<small>Balance {formatPoints(entry.balance_after)}</small></p></article>)}</div></section>
+        <form className="content-card limits-card" onSubmit={save}><div className="panel-heading"><span>RESPONSIBLE PLAY</span><h2>Your play limits</h2><p>The database blocks new ticket purchases after your daily point limit is reached.</p></div><label>Daily lottery limit<input type="number" min="0" max="100000" value={form.dailyPointLimit} onChange={(event) => setForm((current) => ({ ...current, dailyPointLimit: event.target.value }))}/><small>points per UTC day</small></label><label>Session reminder<input type="number" min="5" max="1440" value={form.sessionLimitMinutes} onChange={(event) => setForm((current) => ({ ...current, sessionLimitMinutes: event.target.value }))}/><small>minutes</small></label>{message && <p className={message.includes("successfully") ? "success-message" : "auth-error"}>{message}</p>}<button className="primary-button" type="submit" disabled={saving}>{saving ? "Saving…" : "Save play limits"}</button><p className="limits-note"><Icon name="shield" size={16}/>Points have no cash value and cannot be withdrawn.</p></form>
+      </div>
     </PlayerLayout>
   );
 }
@@ -407,168 +542,113 @@ function RouletteGame({ onNavigate, onLogout, onSpin }) {
   );
 }
 
-function AppHeader({ onLogout, onNavigate }) {
+function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishResult, onAdjustPoints, onRefresh, onLogout }) {
+  const tomorrow = new Date(Date.now() + 86400000);
+  const closeTime = new Date(Date.now() + 23 * 3600000);
+  const toLocalInput = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const [drawForm, setDrawForm] = useState({
+    code: `RW-${new Date().getFullYear()}-${String((data?.draws?.length || 0) + 1).padStart(3, "0")}`,
+    name: "RoyalWin Super 7",
+    closesAt: toLocalInput(closeTime),
+    drawAt: toLocalInput(tomorrow),
+    maxNumber: 36,
+    picksRequired: 6,
+    entryPoints: 100,
+    prizeLabel: "2,50,000 reward points",
+  });
+  const [resultInputs, setResultInputs] = useState({});
+  const [cancelReasons, setCancelReasons] = useState({});
+  const [pointsForm, setPointsForm] = useState({ email: "", points: 2500, reason: "Promotional reward points" });
+  const [busy, setBusy] = useState("");
+  const [notice, setNotice] = useState("");
+  const summary = data?.summary || {};
+  const draws = data?.draws || [];
+  const players = data?.players || [];
+
+  const runAction = async (key, action, successMessage) => {
+    if (busy) return;
+    setBusy(key);
+    setNotice("");
+    try {
+      await action();
+      await onRefresh();
+      setNotice(successMessage);
+    } catch (error) {
+      setNotice(error.message || "Admin action failed.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const createDraw = (event) => {
+    event.preventDefault();
+    runAction("create", () => onCreateDraw(drawForm), "Draft draw created. Review reward tiers, then open it for players.");
+  };
+
+  const publish = (draw) => {
+    const numbers = String(resultInputs[draw.id] || "").split(/[\s,]+/).filter(Boolean).map(Number);
+    if (numbers.length !== Number(draw.picks_required) || numbers.some((number) => !Number.isInteger(number))) {
+      setNotice(`Enter exactly ${draw.picks_required} valid result numbers.`);
+      return;
+    }
+    runAction(`publish-${draw.id}`, () => onPublishResult(draw.id, numbers), "Result published. All tickets were settled and winner points were credited automatically.");
+  };
+
   return (
-    <header className="app-header">
-      <div className="header-brand"><BrandMark compact/><span><strong>RoyalWin786</strong><small>Partner Console</small></span></div>
-      <nav className="desktop-nav" aria-label="Desktop navigation">
-        <button type="button" className="active"><Icon name="home" size={18}/>Overview</button>
-        <button type="button" onClick={() => onNavigate("orders")}><Icon name="trophy" size={18}/>Results</button>
-        <button type="button" onClick={() => onNavigate("stock")}><Icon name="cube" size={18}/>Stock</button>
-        <button type="button" onClick={() => onNavigate("orders")}><Icon name="document" size={18}/>Orders</button>
-      </nav>
-      <button type="button" className="icon-button logout-button" aria-label="Logout" onClick={onLogout}><Icon name="logout" size={24}/><span>Logout</span></button>
-    </header>
+    <AppFrame className="admin-console-frame">
+      <div className="admin-console-screen">
+        <header className="app-header admin-console-header"><div className="header-brand"><BrandMark compact/><span><strong>RoyalWin786</strong><small>Lottery Control Centre</small></span></div><button type="button" className="admin-refresh" onClick={onRefresh} disabled={Boolean(busy)}><Icon name="reset" size={18}/>Refresh</button><button type="button" className="icon-button logout-button" onClick={onLogout}><Icon name="logout" size={22}/><span>Logout</span></button></header>
+        <div className="admin-console-content">
+          <div className="admin-page-heading"><div><span>SECURE ADMIN</span><h1>Lottery operations</h1><p>Create draws, publish verified results, settle prizes and manage player reward points.</p></div><span className="backend-mode-badge live">Live Supabase controls</span></div>
+          {notice && <p className={notice.includes("failed") || notice.includes("invalid") || notice.includes("Enter exactly") ? "auth-error admin-notice" : "success-message admin-notice"}>{notice}</p>}
+
+          <section className="admin-stat-grid">
+            <article><span><Icon name="user" size={22}/></span><p>Players<strong>{formatPoints(summary.players)}</strong></p></article>
+            <article><span><Icon name="trophy" size={22}/></span><p>Open draws<strong>{formatPoints(summary.open_draws)}</strong></p></article>
+            <article><span><Icon name="ticket" size={22}/></span><p>Tickets<strong>{formatPoints(summary.tickets)}</strong></p></article>
+            <article><span><Icon name="wallet" size={22}/></span><p>Ticket points<strong>{formatPoints(summary.points_sales)}</strong></p></article>
+            <article><span><Icon name="sparkle" size={22}/></span><p>Awarded<strong>{formatPoints(summary.winner_points)}</strong></p></article>
+          </section>
+
+          <div className="admin-workspace-grid">
+            <form className="content-card admin-form-card" onSubmit={createDraw}>
+              <div className="panel-heading"><span>NEW DRAW</span><h2>Create lottery draw</h2><p>New draws start as drafts and must be opened separately.</p></div>
+              <div className="admin-form-grid"><label>Draw code<input required value={drawForm.code} onChange={(event) => setDrawForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}/></label><label>Draw name<input required value={drawForm.name} onChange={(event) => setDrawForm((current) => ({ ...current, name: event.target.value }))}/></label><label>Sales close<input required type="datetime-local" value={drawForm.closesAt} onChange={(event) => setDrawForm((current) => ({ ...current, closesAt: event.target.value }))}/></label><label>Draw time<input required type="datetime-local" value={drawForm.drawAt} onChange={(event) => setDrawForm((current) => ({ ...current, drawAt: event.target.value }))}/></label><label>Maximum number<input required type="number" min="6" max="99" value={drawForm.maxNumber} onChange={(event) => setDrawForm((current) => ({ ...current, maxNumber: event.target.value }))}/></label><label>Numbers to pick<input required type="number" min="4" max="12" value={drawForm.picksRequired} onChange={(event) => setDrawForm((current) => ({ ...current, picksRequired: event.target.value }))}/></label><label>Entry points<input required type="number" min="0" max="100000" value={drawForm.entryPoints} onChange={(event) => setDrawForm((current) => ({ ...current, entryPoints: event.target.value }))}/></label><label>Top reward label<input required value={drawForm.prizeLabel} onChange={(event) => setDrawForm((current) => ({ ...current, prizeLabel: event.target.value }))}/></label></div>
+              <button className="primary-button" type="submit" disabled={Boolean(busy)}>{busy === "create" ? "Creating…" : "Create draft draw"}</button>
+            </form>
+
+            <form className="content-card admin-form-card" onSubmit={(event) => { event.preventDefault(); runAction("points", () => onAdjustPoints(pointsForm.email, pointsForm.points, pointsForm.reason), "Player reward points updated and recorded in the audit ledger."); }}>
+              <div className="panel-heading"><span>PLAYER SUPPORT</span><h2>Adjust reward points</h2><p>Use only for approved promotions, support corrections or testing. Every change is audited.</p></div>
+              <label>Player email<input type="email" required value={pointsForm.email} onChange={(event) => setPointsForm((current) => ({ ...current, email: event.target.value }))}/></label><label>Point change<input type="number" required min="-1000000" max="1000000" value={pointsForm.points} onChange={(event) => setPointsForm((current) => ({ ...current, points: event.target.value }))}/><small>Use a negative value only for an approved correction.</small></label><label>Reason<input required minLength="5" value={pointsForm.reason} onChange={(event) => setPointsForm((current) => ({ ...current, reason: event.target.value }))}/></label><button className="primary-button" type="submit" disabled={Boolean(busy)}>{busy === "points" ? "Updating…" : "Record point adjustment"}</button>
+              <div className="admin-player-preview"><strong>Recent players</strong>{players.slice(0, 6).map((player) => <button type="button" key={player.id} onClick={() => setPointsForm((current) => ({ ...current, email: player.email || "" }))}><span>{player.display_name || player.email || "Player"}<small>{player.status}</small></span><b>{formatPoints(player.pointsBalance)} pts</b></button>)}</div>
+            </form>
+          </div>
+
+          <section className="admin-draw-section"><div className="panel-heading"><span>DRAW CONTROL</span><h2>All lottery draws</h2><p>Publishing is allowed only after draw time. Settlement is atomic and cannot be rerun.</p></div><div className="admin-draw-list">{draws.length === 0 && <p className="empty-state">No draws created yet.</p>}{draws.map((draw) => <article className="content-card admin-draw-card" key={draw.id}><div className="admin-draw-head"><div><span className={`draw-status status-${draw.status}`}>{draw.status}</span><h3>{draw.name}</h3><p>{draw.code} • {draw.ticketCount} tickets</p></div><div><small>Draw time</small><strong>{formatDateTime(draw.draw_at)}</strong></div></div>{draw.result_numbers?.length > 0 ? <div className="ticket-balls ticket-balls--result">{draw.result_numbers.map((number) => <strong key={number}>{String(number).padStart(2, "0")}</strong>)}</div> : <div className="admin-draw-actions">{draw.status === "draft" && <button type="button" className="primary-button" disabled={Boolean(busy)} onClick={() => runAction(`open-${draw.id}`, () => onOpenDraw(draw.id), "Draw is now open for player ticket purchases.")}>{busy === `open-${draw.id}` ? "Opening…" : "Open draw for players"}</button>}{["open", "closed"].includes(draw.status) && <div className="publish-result-form"><input value={resultInputs[draw.id] || ""} onChange={(event) => setResultInputs((current) => ({ ...current, [draw.id]: event.target.value }))} placeholder={`Enter ${draw.picks_required} numbers: 4, 7, 12…`}/><button type="button" disabled={Boolean(busy)} onClick={() => publish(draw)}>{busy === `publish-${draw.id}` ? "Publishing…" : "Publish & settle"}</button></div>}</div>}{["draft", "open", "closed"].includes(draw.status) && <div className="cancel-draw-row"><input value={cancelReasons[draw.id] || ""} onChange={(event) => setCancelReasons((current) => ({ ...current, [draw.id]: event.target.value }))} placeholder="Cancellation reason (required)"/><button type="button" disabled={Boolean(busy) || String(cancelReasons[draw.id] || "").trim().length < 5} onClick={() => runAction(`cancel-${draw.id}`, () => onCancelDraw(draw.id, cancelReasons[draw.id]), "Draw cancelled. Every confirmed ticket was refunded automatically.")}>{busy === `cancel-${draw.id}` ? "Cancelling…" : "Cancel & refund"}</button></div>}<div className="admin-tier-row">{draw.draw_prize_tiers?.map((tier) => <span key={tier.matches_required}>{tier.matches_required} match <strong>{formatPoints(tier.prize_points)} pts</strong></span>)}</div></article>)}</div></section>
+          <p className="responsible-note"><Icon name="shield" size={16}/>This console manages non-cash reward points. Real-money operations require a separate regulated and audited backend.</p>
+        </div>
+      </div>
+    </AppFrame>
   );
 }
 
-function Countdown() {
-  const [seconds, setSeconds] = useState(2 * 3600 + 41 * 60 + 12);
+function Countdown({ target }) {
+  const calculateSeconds = () => target
+    ? Math.max(0, Math.floor((new Date(target).getTime() - Date.now()) / 1000))
+    : 0;
+  const [seconds, setSeconds] = useState(calculateSeconds);
   useEffect(() => {
-    const timer = window.setInterval(() => setSeconds((value) => Math.max(0, value - 1)), 1000);
+    setSeconds(calculateSeconds());
+    const timer = window.setInterval(() => setSeconds(calculateSeconds()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
-  const hours = String(Math.floor(seconds / 3600)).padStart(2, "0");
+  }, [target]);
+  const days = Math.floor(seconds / 86400);
+  const hours = String(Math.floor((seconds % 86400) / 3600)).padStart(2, "0");
   const minutes = String(Math.floor((seconds % 3600) / 60)).padStart(2, "0");
-  const secs = String(seconds % 60).padStart(2, "0");
   return (
     <div className="countdown-row">
-      {[{ value: hours, label: "Hour" }, { value: minutes, label: "Minutes" }, { value: secs, label: "Seconds" }].map((item, index) => <div className="countdown-part" key={item.label}><div className="countdown-box"><strong>{item.value}</strong><span>{item.label}</span></div>{index < 2 && <b>:</b>}</div>)}
+      {[{ value: days, label: "Days" }, { value: hours, label: "Hours" }, { value: minutes, label: "Minutes" }].map((item, index) => <div className="countdown-part" key={item.label}><div className="countdown-box"><strong>{String(item.value).padStart(2, "0")}</strong><span>{item.label}</span></div>{index < 2 && <b>:</b>}</div>)}
     </div>
-  );
-}
-
-function BottomMenu({ onNavigate }) {
-  const items = [
-    { icon: "home", label: "Overview", screen: "dashboard", active: true },
-    { icon: "trophy", label: "Results", screen: "orders" },
-    { icon: "cube", label: "Stock", screen: "stock" },
-    { icon: "ticket", label: "Verify Ticket", screen: "orders" },
-  ];
-  return (
-    <nav className="bottom-menu" aria-label="Main navigation">
-      {items.map((item) => <button type="button" key={item.label} className={item.active ? "active" : ""} onClick={() => onNavigate(item.screen)}><span><Icon name={item.icon} size={27}/></span><small>{item.label}</small></button>)}
-    </nav>
-  );
-}
-
-function Dashboard({ onNavigate, onLogout }) {
-  return (
-    <AppFrame className="dashboard-frame">
-      <div className="dashboard-screen">
-        <AppHeader onLogout={onLogout} onNavigate={onNavigate}/>
-        <div className="dashboard-content">
-          <div className="page-heading"><div><span>Dashboard</span><h1>Good afternoon, partner</h1><p>Here is your RoyalWin786 activity overview.</p></div><button type="button" onClick={() => onNavigate("stock")}>Manage stock <span>→</span></button></div>
-          <section className="content-card timer-card">
-            <div className="section-heading"><span className="chip"><Icon name="clock" size={19}/>Next draw close</span><h2>Time remaining</h2></div>
-            <Countdown />
-          </section>
-          <section className="content-card latest-card">
-            <span className="chip"><i/>Latest draw</span>
-            <h2>ROYALWIN GOLD WEEKLY DRAW</h2>
-            <div className="draw-grid">
-              <div><span className="round-icon"><Icon name="calendar" size={23}/></span><p>Draw Date<strong>15/01/2026</strong></p></div>
-              <div><span className="round-icon"><Icon name="clock" size={23}/></span><p>Time<strong>01:00 PM</strong></p></div>
-            </div>
-          </section>
-          <section className="report-grid">
-            {reportItems.map((item) => <button type="button" key={item.label} className="report-tile" onClick={() => onNavigate(item.screen)}><span><Icon name={item.icon} size={30}/></span><small>{item.label}</small></button>)}
-          </section>
-        </div>
-        <BottomMenu onNavigate={onNavigate}/>
-      </div>
-    </AppFrame>
-  );
-}
-
-function ScreenTopBar({ title, onBack, action }) {
-  return (
-    <header className="screen-topbar">
-      <button type="button" className="back-button" aria-label="Go back" onClick={onBack}><Icon name="back" size={35}/></button>
-      <h1>{title}</h1>
-      {action || <span className="topbar-spacer"/>}
-    </header>
-  );
-}
-
-function StockScreen({ onBack }) {
-  const [fields, setFields] = useState({ from: "", to: "", qty: "" });
-  const [activeField, setActiveField] = useState("from");
-  const [submitted, setSubmitted] = useState(false);
-
-  const addDigit = (digit) => {
-    setFields((current) => ({ ...current, [activeField]: `${current[activeField]}${digit}`.slice(0, 5) }));
-    setSubmitted(false);
-  };
-  const clear = () => { setFields({ from: "", to: "", qty: "" }); setSubmitted(false); };
-  const removeDigit = () => setFields((current) => ({ ...current, [activeField]: current[activeField].slice(0, -1) }));
-  const bookwise = () => { setFields({ from: "2015", to: "2015", qty: "50" }); setSubmitted(false); };
-
-  return (
-    <AppFrame className="details-frame">
-      <div className="details-screen stock-screen">
-        <ScreenTopBar title="Stock Unsold" onBack={onBack} action={<div className="expiry-pill">5d 4h 6m 1s</div>}/>
-        <div className="details-content">
-          <section className="content-card stock-summary">
-            <div className="summary-top"><span>Draw Date: 20-01-2026</span><button type="button"><Icon name="eye" size={23}/>View Stock</button></div>
-            <h2>ROYALWIN PREMIUM WEEKLY DRAW - RW1233</h2>
-            <div className="stock-range">
-              <div className="stock-tags"><span>Book 50</span><span>Series 00</span></div>
-              <div className="stock-values"><p>From<strong>2015</strong></p><p>To<strong>2015</strong></p><p>Qty<strong>50</strong></p><button type="button" aria-label="Reset stock"><Icon name="reset" size={28}/></button></div>
-            </div>
-          </section>
-          <section className="content-card unsold-entry">
-            <div className="entry-heading"><h2>Enter Number for Unsold</h2><span>Total Qty : <strong>{fields.qty || 0}</strong></span></div>
-            <div className="field-grid">
-              {["from", "to", "qty"].map((field) => <button type="button" key={field} className={activeField === field ? "active" : ""} onClick={() => setActiveField(field)}><span>{field[0].toUpperCase() + field.slice(1)}</span><strong>{fields[field] || "—"}</strong></button>)}
-            </div>
-            {submitted && <p className="submit-message">Unsold quantity submitted successfully.</p>}
-          </section>
-          <section className="number-pad" aria-label="Number pad">
-            {[1,2,3,4,5,6,7,8,9].map((digit) => <button type="button" key={digit} onClick={() => addDigit(digit)}>{digit}</button>)}
-            <button type="button" className="clear-key" onClick={clear}>C</button>
-            <button type="button" className="delete-key" onClick={removeDigit}><Icon name="delete" size={28}/></button>
-            <button type="button" className="qr-key" aria-label="Scan QR"><Icon name="qr" size={28}/></button>
-            <button type="button" onClick={() => addDigit(0)}>0</button>
-            <button type="button" className="bookwise-key" onClick={bookwise}>Bookwise<br/>Unsold</button>
-            <button type="button" className="submit-key" onClick={() => setSubmitted(true)}>Submit</button>
-          </section>
-        </div>
-      </div>
-    </AppFrame>
-  );
-}
-
-function DrawOrder({ draw, cleared }) {
-  return (
-    <div className="order-group">
-      <section className="lottery-order">
-        <div className="lottery-order__head"><div><h2>{draw.name}</h2><p>DRAW DATE: {draw.date} • CODE: {draw.code}</p></div><span>Total</span></div>
-        <div className="order-bands">{["5/5","10/10","25/25","50/50","100/100"].map((item) => <strong key={item}>{item}</strong>)}</div>
-        <div className="order-inputs"><span><Icon name="copy" size={24}/></span>{[0,1,2,3,4].map((item) => <div key={item}>{cleared ? 0 : 0}</div>)}</div>
-      </section>
-      <section className="lottery-total"><div><h2>{draw.name}<br/>{draw.code}</h2><p>Total tickets for this draw</p></div><span>Grand<strong>0</strong></span></section>
-    </div>
-  );
-}
-
-function OrdersScreen({ onBack }) {
-  const [cleared, setCleared] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  return (
-    <AppFrame className="details-frame orders-frame">
-      <div className="details-screen orders-screen">
-        <ScreenTopBar title="View Order List" onBack={onBack} action={<button type="button" className="clear-orders" onClick={() => { setCleared(true); setSubmitted(false); }}>Clear</button>}/>
-        <div className="orders-content">
-          {orderGroups.map((draw) => <DrawOrder key={draw.code} draw={draw} cleared={cleared}/>) }
-        </div>
-        <div className="order-footer">
-          <div className="grand-total"><span>Grand Total</span><strong>0</strong></div>
-          {submitted && <p>Order list submitted.</p>}
-          <div><button type="button" className="primary-button" onClick={() => setSubmitted(true)}>Submit</button><button type="button" className="secondary-button" onClick={() => { setCleared(true); setSubmitted(false); }}>Clear</button></div>
-        </div>
-      </div>
-    </AppFrame>
   );
 }
 
@@ -576,38 +656,69 @@ export default function App() {
   const [screen, setScreen] = useState(() => {
     if (process.env.NODE_ENV === "development") {
       const previewScreen = new URLSearchParams(window.location.search).get("screen");
-      const allowedPreviews = ["player-login", "player-dashboard", "player-lottery", "player-tickets", "player-roulette", "admin-login", "admin-dashboard"];
+      const allowedPreviews = ["player-login", "player-dashboard", "player-lottery", "player-tickets", "player-results", "player-wallet", "player-roulette", "admin-login", "admin-dashboard"];
       if (allowedPreviews.includes(previewScreen)) return previewScreen;
     }
     return "player-login";
   });
   const [playerEmail, setPlayerEmail] = useState("");
+  const [playerProfile, setPlayerProfile] = useState({ display_name: "RoyalWin player", email: "player@example.com" });
   const [playerTickets, setPlayerTickets] = useState(initialPlayerTickets);
-  const [featuredDraw, setFeaturedDraw] = useState(null);
+  const [featuredDraw, setFeaturedDraw] = useState(liveBackendActive ? null : demoDraw);
+  const [lotteryDraws, setLotteryDraws] = useState(liveBackendActive ? [] : [demoDraw, demoPublishedDraw]);
   const [walletPoints, setWalletPoints] = useState(2450);
+  const [walletLedger, setWalletLedger] = useState([]);
+  const [playSettings, setPlaySettings] = useState({ daily_point_limit: 1000, session_limit_minutes: 60 });
+  const [adminData, setAdminData] = useState({
+    summary: { players: 1, open_draws: 1, tickets: 1, points_sales: 100, winner_points: 0 },
+    draws: [{ ...demoDraw, ticketCount: 1 }, { ...demoPublishedDraw, ticketCount: 1 }],
+    players: [{ id: "demo-player", display_name: "Demo player", email: "player@example.com", status: "active", pointsBalance: 2450 }],
+  });
+
+  const loadPlayerPortalData = async () => {
+    if (!liveBackendActive) return;
+    const [draw, draws, tickets, wallet, ledger, settings] = await Promise.all([
+      getFeaturedLotteryDraw(),
+      getLotteryDraws(),
+      getPlayerTickets(),
+      getPlayerWallet(),
+      getWalletLedger(),
+      getResponsiblePlaySettings(),
+    ]);
+    setFeaturedDraw(draw);
+    setLotteryDraws(draws);
+    setPlayerTickets(tickets);
+    setWalletPoints(Number(wallet.points_balance));
+    setWalletLedger(ledger);
+    setPlaySettings(settings);
+  };
+
+  const loadAdminPortalData = async () => {
+    if (!liveBackendActive) return;
+    setAdminData(await getAdminLotteryData());
+  };
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [screen]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return undefined;
+    if (!liveBackendActive) return undefined;
     let cancelled = false;
     const restoreSession = async () => {
       try {
         const identity = await getCurrentIdentity();
         if (!identity || cancelled) return;
         if (identity.profile.role === "admin") {
+          await loadAdminPortalData();
+          if (cancelled) return;
           setScreen("admin-dashboard");
           return;
         }
-        const [draw, tickets, wallet] = await Promise.all([
-          getFeaturedLotteryDraw(), getPlayerTickets(), getPlayerWallet(),
-        ]);
+        await loadPlayerPortalData();
         if (!cancelled) {
-          setFeaturedDraw(draw);
-          setPlayerTickets(tickets);
-          setWalletPoints(Number(wallet.points_balance));
+          setPlayerProfile(identity.profile);
+          setPlayerEmail(identity.profile.email || "");
           setScreen("player-dashboard");
         }
       } catch {
@@ -619,53 +730,98 @@ export default function App() {
   }, []);
 
   const requestMagicLink = async () => {
-    if (isSupabaseConfigured) {
+    if (liveBackendActive) {
       const redirectTo = new URL(`${process.env.PUBLIC_URL || ""}/`, window.location.origin).toString();
       await requestPlayerMagicLink(playerEmail, redirectTo);
       setScreen("player-email-sent");
       return;
     }
+    setPlayerProfile({ display_name: "Demo player", email: playerEmail });
     setScreen("player-dashboard");
   };
   const adminLogin = async ({ userId, password }) => {
-    if (isSupabaseConfigured) await signInAdmin(userId, password);
+    if (liveBackendActive) {
+      await signInAdmin(userId, password);
+      await loadAdminPortalData();
+    }
     setScreen("admin-dashboard");
   };
   const logout = async () => {
-    try { if (isSupabaseConfigured) await signOut(); }
+    try { if (liveBackendActive) await signOut(); }
     finally {
       setPlayerEmail("");
-      setFeaturedDraw(null);
+      setPlayerProfile({ display_name: "RoyalWin player", email: "player@example.com" });
+      setFeaturedDraw(liveBackendActive ? null : demoDraw);
+      setLotteryDraws(liveBackendActive ? [] : [demoDraw, demoPublishedDraw]);
       setPlayerTickets(initialPlayerTickets);
       setWalletPoints(2450);
+      setWalletLedger([]);
       setScreen("player-login");
     }
   };
   const savePlayerTicket = async (numbers) => {
-    if (isSupabaseConfigured) {
+    if (liveBackendActive) {
       if (!featuredDraw?.id) throw new Error("No open lottery draw is available.");
       await purchaseLotteryTicket(featuredDraw.id, numbers);
-      const [tickets, wallet] = await Promise.all([getPlayerTickets(), getPlayerWallet()]);
-      setPlayerTickets(tickets);
-      setWalletPoints(Number(wallet.points_balance));
+      await loadPlayerPortalData();
       return;
     }
-    setPlayerTickets((current) => [{ id: `RW786-${String(Date.now()).slice(-6)}`, numbers, draw: "RoyalWin Super 7", status: "Upcoming" }, ...current]);
+    setPlayerTickets((current) => [{ id: `RW786-${String(Date.now()).slice(-8)}`, numbers, matchedNumbers: [], matchCount: 0, prizePoints: 0, pointsSpent: 100, draw: demoDraw.name, drawCode: demoDraw.code, drawAt: demoDraw.draw_at, status: "confirmed", createdAt: new Date().toISOString() }, ...current]);
     setWalletPoints((current) => Math.max(0, current - 100));
   };
+  const verifyPlayerTicket = async (code) => {
+    if (liveBackendActive) return verifyLotteryTicket(code);
+    const ticket = playerTickets.find((item) => item.id.toUpperCase() === String(code).trim().toUpperCase());
+    return ticket ? { ticket_code: ticket.id, draw_name: ticket.draw, ticket_status: ticket.status, match_count: ticket.matchCount, prize_points: ticket.prizePoints } : null;
+  };
+  const savePlaySettings = async (settings) => {
+    if (liveBackendActive) {
+      const updated = await updateResponsiblePlaySettings(settings);
+      setPlaySettings(updated);
+      return;
+    }
+    setPlaySettings({ daily_point_limit: Number(settings.dailyPointLimit), session_limit_minutes: Number(settings.sessionLimitMinutes) });
+  };
   const playRouletteRound = async (choice) => {
-    if (isSupabaseConfigured) return playDemoRoulette(choice);
+    if (liveBackendActive) return playDemoRoulette(choice);
     return null;
   };
 
-  if (screen === "player-login") return <PlayerLogin email={playerEmail} setEmail={setPlayerEmail} onContinue={requestMagicLink} onRegister={requestMagicLink} onAdmin={() => setScreen("admin-login")} backendEnabled={isSupabaseConfigured}/>;
-  if (screen === "player-email-sent") return <PlayerEmailSent email={playerEmail} onBack={() => setScreen("player-login")} onResend={requestMagicLink} backendEnabled={isSupabaseConfigured}/>;
-  if (screen === "admin-login") return <AdminLogin onBack={() => setScreen("player-login")} onLogin={adminLogin} backendEnabled={isSupabaseConfigured}/>;
-  if (screen === "player-dashboard") return <PlayerDashboard tickets={playerTickets} walletPoints={walletPoints} onNavigate={setScreen} onLogout={logout}/>;
+  const adminCreateDraw = async (input) => {
+    if (liveBackendActive) return createLotteryDraw(input);
+    const newDraw = { ...demoDraw, id: `demo-${Date.now()}`, code: input.code, name: input.name, status: "draft", closes_at: new Date(input.closesAt).toISOString(), draw_at: new Date(input.drawAt).toISOString(), max_number: Number(input.maxNumber), picks_required: Number(input.picksRequired), entry_points: Number(input.entryPoints), prize_label: input.prizeLabel, ticketCount: 0 };
+    setAdminData((current) => ({ ...current, draws: [newDraw, ...current.draws] }));
+    return newDraw.id;
+  };
+  const adminOpenDraw = async (drawId) => {
+    if (liveBackendActive) return openLotteryDraw(drawId);
+    setAdminData((current) => ({ ...current, draws: current.draws.map((draw) => draw.id === drawId ? { ...draw, status: "open" } : draw) }));
+  };
+  const adminCancelDraw = async (drawId, reason) => {
+    if (liveBackendActive) return cancelLotteryDraw(drawId, reason);
+    setAdminData((current) => ({ ...current, draws: current.draws.map((draw) => draw.id === drawId ? { ...draw, status: "cancelled" } : draw) }));
+    return { refunded_tickets: 0, refunded_points: 0 };
+  };
+  const adminPublishResult = async (drawId, numbers) => {
+    if (liveBackendActive) return publishLotteryResult(drawId, numbers);
+    setAdminData((current) => ({ ...current, draws: current.draws.map((draw) => draw.id === drawId ? { ...draw, status: "published", result_numbers: [...numbers].sort((a, b) => a - b) } : draw) }));
+    return { settled_tickets: 0, winning_tickets: 0, awarded_points: 0 };
+  };
+  const adminAdjustPoints = async (email, points, reason) => {
+    if (liveBackendActive) return adjustPlayerPoints(email, points, reason);
+    setAdminData((current) => ({ ...current, players: current.players.map((player) => player.email === email ? { ...player, pointsBalance: Math.max(0, player.pointsBalance + Number(points)) } : player) }));
+    return 0;
+  };
+
+  if (screen === "player-login") return <PlayerLogin email={playerEmail} setEmail={setPlayerEmail} onContinue={requestMagicLink} onRegister={requestMagicLink} onAdmin={() => setScreen("admin-login")} backendEnabled={liveBackendActive}/>;
+  if (screen === "player-email-sent") return <PlayerEmailSent email={playerEmail} onBack={() => setScreen("player-login")} onResend={requestMagicLink} backendEnabled={liveBackendActive}/>;
+  if (screen === "admin-login") return <AdminLogin onBack={() => setScreen("player-login")} onLogin={adminLogin} backendEnabled={liveBackendActive}/>;
+  if (screen === "player-dashboard") return <PlayerDashboard profile={playerProfile} tickets={playerTickets} walletPoints={walletPoints} draw={featuredDraw} latestResult={lotteryDraws.find((draw) => draw.status === "published")} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-lottery") return <LotteryGame onNavigate={setScreen} onLogout={logout} onSave={savePlayerTicket} draw={featuredDraw}/>;
-  if (screen === "player-tickets") return <PlayerTickets tickets={playerTickets} onNavigate={setScreen} onLogout={logout}/>;
+  if (screen === "player-tickets") return <PlayerTickets tickets={playerTickets} onVerify={verifyPlayerTicket} onNavigate={setScreen} onLogout={logout}/>;
+  if (screen === "player-results") return <PlayerResults draws={lotteryDraws} tickets={playerTickets} onNavigate={setScreen} onLogout={logout}/>;
+  if (screen === "player-wallet") return <PlayerWallet profile={playerProfile} walletPoints={walletPoints} ledger={walletLedger} settings={playSettings} onSaveSettings={savePlaySettings} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-roulette") return <RouletteGame onNavigate={setScreen} onLogout={logout} onSpin={playRouletteRound}/>;
-  if (screen === "stock") return <StockScreen onBack={() => setScreen("admin-dashboard")}/>;
-  if (screen === "orders") return <OrdersScreen onBack={() => setScreen("admin-dashboard")}/>;
-  return <Dashboard onNavigate={setScreen} onLogout={logout}/>;
+  if (screen === "admin-dashboard") return <AdminConsole data={adminData} onCreateDraw={adminCreateDraw} onOpenDraw={adminOpenDraw} onCancelDraw={adminCancelDraw} onPublishResult={adminPublishResult} onAdjustPoints={adminAdjustPoints} onRefresh={loadAdminPortalData} onLogout={logout}/>;
+  return <PlayerLogin email={playerEmail} setEmail={setPlayerEmail} onContinue={requestMagicLink} onRegister={requestMagicLink} onAdmin={() => setScreen("admin-login")} backendEnabled={liveBackendActive}/>;
 }
