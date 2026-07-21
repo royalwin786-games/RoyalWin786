@@ -1,13 +1,13 @@
 {
   "files": {
-    "main.css": "/RoyalWin786/static/css/main.ce1a9526.css",
-    "main.js": "/RoyalWin786/static/js/main.d7a87267.js",
+    "main.css": "/RoyalWin786/static/css/main.1cd571cf.css",
+    "main.js": "/RoyalWin786/static/js/main.8ff36059.js",
     "index.html": "/RoyalWin786/index.html",
-    "main.ce1a9526.css.map": "/RoyalWin786/static/css/main.ce1a9526.css.map",
-    "main.d7a87267.js.map": "/RoyalWin786/static/js/main.d7a87267.js.map"
+    "main.1cd571cf.css.map": "/RoyalWin786/static/css/main.1cd571cf.css.map",
+    "main.8ff36059.js.map": "/RoyalWin786/static/js/main.8ff36059.js.map"
   },
   "entrypoints": [
-    "static/css/main.ce1a9526.css",
-    "static/js/main.d7a87267.js"
+    "static/css/main.1cd571cf.css",
+    "static/js/main.8ff36059.js"
   ]
 }
