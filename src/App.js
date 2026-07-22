@@ -723,13 +723,13 @@ function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishR
   const updateStatus = async (player, status) => {
     if (updatingPlayer) return;
     const label = { banned: "Ban", suspended: "Hold", active: "Activate" }[status] || status;
-    if (!window.confirm(\`${label} player "${player.display_name || player.email}"?\`)) return;
+    if (!window.confirm(`${label} player "${player.display_name || player.email}"?`)) return;
     setUpdatingPlayer(player.id);
     setNotice("");
     try {
       await onUpdatePlayerStatus(player.id, status);
       await onRefresh();
-      setNotice(\`Player status updated to ${status}.\`);
+      setNotice(`Player status updated to ${status}.`);
     } catch (err) {
       setNotice(err.message || "Failed to update player status.");
     } finally {
