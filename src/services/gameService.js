@@ -257,3 +257,24 @@ export async function adjustPlayerPoints(email, points, reason) {
   if (error) throw error;
   return Number(data || 0);
 }
+
+export async function updatePlayerStatus(playerId, status) {
+  const client = requireSupabase();
+  const { error } = await client
+    .from("profiles")
+    .update({ status })
+    .eq("id", playerId);
+  if (error) throw error;
+}
+
+export async function getPlayerProfile(playerId) {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("profiles")
+    .select("id, display_name, email, phone, age, role, status, created_at, wallets(points_balance)")
+    .eq("id", playerId)
+    .single();
+  if (error) throw error;
+  const wallet = Array.isArray(data.wallets) ? data.wallets[0] : data.wallets;
+  return { ...data, pointsBalance: Number(wallet?.points_balance || 0) };
+}
