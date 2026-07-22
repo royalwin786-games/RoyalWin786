@@ -29,6 +29,7 @@ import {
   purchaseLotteryTicket,
   updateResponsiblePlaySettings,
   verifyLotteryTicket,
+  updatePlayerStatus,
 } from "./services/gameService";
 
 const lotteryNumbers = Array.from({ length: 36 }, (_, index) => index + 1);
@@ -693,7 +694,7 @@ function RouletteGame({ onNavigate, onLogout, onSpin }) {
   );
 }
 
-function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishResult, onAdjustPoints, onRefresh, onLogout }) {
+function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishResult, onAdjustPoints, onUpdatePlayerStatus, onRefresh, onLogout }) {
   const tomorrow = new Date(Date.now() + 86400000);
   const closeTime = new Date(Date.now() + 23 * 3600000);
   const toLocalInput = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -712,9 +713,35 @@ function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishR
   const [pointsForm, setPointsForm] = useState({ email: "", points: 2500, reason: "Promotional reward points" });
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
+  const [adminTab, setAdminTab] = useState("draws");
+  const [playerSearch, setPlayerSearch] = useState("");
+  const [updatingPlayer, setUpdatingPlayer] = useState("");
   const summary = data?.summary || {};
   const draws = data?.draws || [];
   const players = data?.players || [];
+
+  const updateStatus = async (player, status) => {
+    if (updatingPlayer) return;
+    const label = { banned: "Ban", suspended: "Hold", active: "Activate" }[status] || status;
+    if (!window.confirm(\`${label} player "${player.display_name || player.email}"?\`)) return;
+    setUpdatingPlayer(player.id);
+    setNotice("");
+    try {
+      await onUpdatePlayerStatus(player.id, status);
+      await onRefresh();
+      setNotice(\`Player status updated to ${status}.\`);
+    } catch (err) {
+      setNotice(err.message || "Failed to update player status.");
+    } finally {
+      setUpdatingPlayer("");
+    }
+  };
+
+  const filteredPlayers = players.filter(p =>
+    (p.display_name || "").toLowerCase().includes(playerSearch.toLowerCase()) ||
+    (p.email || "").toLowerCase().includes(playerSearch.toLowerCase()) ||
+    (p.phone || "").toLowerCase().includes(playerSearch.toLowerCase())
+  );
 
   const runAction = async (key, action, successMessage) => {
     if (busy) return;
@@ -753,6 +780,12 @@ function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishR
           <div className="admin-page-heading"><div><span>SECURE ADMIN</span><h1>Lottery operations</h1><p>Create draws, publish verified results, settle prizes and manage player reward points.</p></div><span className="backend-mode-badge live">Live Supabase controls</span></div>
           {notice && <p className={notice.includes("failed") || notice.includes("invalid") || notice.includes("Enter exactly") ? "auth-error admin-notice" : "success-message admin-notice"}>{notice}</p>}
 
+          <div style={{display:"flex",gap:10,margin:"18px 0 0",borderBottom:"1px solid var(--border)",paddingBottom:0}}>
+            {[["draws","🎰 Draws"],["players","👥 Players"]].map(([id,label])=>(
+              <button key={id} type="button" onClick={()=>setAdminTab(id)} style={{padding:"8px 20px",border:"none",borderBottom:`2.5px solid ${adminTab===id?"var(--cyan)":"transparent"}`,background:"transparent",color:adminTab===id?"var(--navy)":"var(--muted)",fontWeight:adminTab===id?800:600,fontSize:14,cursor:"pointer"}}>{label}</button>
+            ))}
+          </div>
+
           <section className="admin-stat-grid">
             <article><span><Icon name="user" size={22}/></span><p>Players<strong>{formatPoints(summary.players)}</strong></p></article>
             <article><span><Icon name="trophy" size={22}/></span><p>Open draws<strong>{formatPoints(summary.open_draws)}</strong></p></article>
@@ -776,6 +809,73 @@ function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishR
           </div>
 
           <section className="admin-draw-section"><div className="panel-heading"><span>DRAW CONTROL</span><h2>All lottery draws</h2><p>Publishing is allowed only after draw time. Settlement is atomic and cannot be rerun.</p></div><div className="admin-draw-list">{draws.length === 0 && <p className="empty-state">No draws created yet.</p>}{draws.map((draw) => <article className="content-card admin-draw-card" key={draw.id}><div className="admin-draw-head"><div><span className={`draw-status status-${draw.status}`}>{draw.status}</span><h3>{draw.name}</h3><p>{draw.code} • {draw.ticketCount} tickets</p></div><div><small>Draw time</small><strong>{formatDateTime(draw.draw_at)}</strong></div></div>{draw.result_numbers?.length > 0 ? <div className="ticket-balls ticket-balls--result">{draw.result_numbers.map((number) => <strong key={number}>{String(number).padStart(2, "0")}</strong>)}</div> : <div className="admin-draw-actions">{draw.status === "draft" && <button type="button" className="primary-button" disabled={Boolean(busy)} onClick={() => runAction(`open-${draw.id}`, () => onOpenDraw(draw.id), "Draw is now open for player ticket purchases.")}>{busy === `open-${draw.id}` ? "Opening…" : "Open draw for players"}</button>}{["open", "closed"].includes(draw.status) && <div className="publish-result-form"><input value={resultInputs[draw.id] || ""} onChange={(event) => setResultInputs((current) => ({ ...current, [draw.id]: event.target.value }))} placeholder={`Enter ${draw.picks_required} numbers: 4, 7, 12…`}/><button type="button" disabled={Boolean(busy)} onClick={() => publish(draw)}>{busy === `publish-${draw.id}` ? "Publishing…" : "Publish & settle"}</button></div>}</div>}{["draft", "open", "closed"].includes(draw.status) && <div className="cancel-draw-row"><input value={cancelReasons[draw.id] || ""} onChange={(event) => setCancelReasons((current) => ({ ...current, [draw.id]: event.target.value }))} placeholder="Cancellation reason (required)"/><button type="button" disabled={Boolean(busy) || String(cancelReasons[draw.id] || "").trim().length < 5} onClick={() => runAction(`cancel-${draw.id}`, () => onCancelDraw(draw.id, cancelReasons[draw.id]), "Draw cancelled. Every confirmed ticket was refunded automatically.")}>{busy === `cancel-${draw.id}` ? "Cancelling…" : "Cancel & refund"}</button></div>}<div className="admin-tier-row">{draw.draw_prize_tiers?.map((tier) => <span key={tier.matches_required}>{tier.matches_required} match <strong>{formatPoints(tier.prize_points)} pts</strong></span>)}</div></article>)}</div></section>
+          {adminTab === "draws" && (
+            <>
+              <div className="admin-workspace-grid">
+                <form className="content-card admin-form-card" onSubmit={createDraw}>
+                  <div className="panel-heading"><span>NEW DRAW</span><h2>Create lottery draw</h2><p>New draws start as drafts and must be opened separately.</p></div>
+                  <div className="admin-form-grid"><label>Draw code<input required value={drawForm.code} onChange={(event) => setDrawForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}/></label><label>Draw name<input required value={drawForm.name} onChange={(event) => setDrawForm((current) => ({ ...current, name: event.target.value }))}/></label><label>Sales close<input required type="datetime-local" value={drawForm.closesAt} onChange={(event) => setDrawForm((current) => ({ ...current, closesAt: event.target.value }))}/></label><label>Draw time<input required type="datetime-local" value={drawForm.drawAt} onChange={(event) => setDrawForm((current) => ({ ...current, drawAt: event.target.value }))}/></label><label>Maximum number<input required type="number" min="6" max="99" value={drawForm.maxNumber} onChange={(event) => setDrawForm((current) => ({ ...current, maxNumber: event.target.value }))}/></label><label>Numbers to pick<input required type="number" min="4" max="12" value={drawForm.picksRequired} onChange={(event) => setDrawForm((current) => ({ ...current, picksRequired: event.target.value }))}/></label><label>Entry points<input required type="number" min="0" max="100000" value={drawForm.entryPoints} onChange={(event) => setDrawForm((current) => ({ ...current, entryPoints: event.target.value }))}/></label><label>Top reward label<input required value={drawForm.prizeLabel} onChange={(event) => setDrawForm((current) => ({ ...current, prizeLabel: event.target.value }))}/></label></div>
+                  <button className="primary-button" type="submit" disabled={Boolean(busy)}>{busy === "create" ? "Creating…" : "Create draft draw"}</button>
+                </form>
+                <form className="content-card admin-form-card" onSubmit={(event) => { event.preventDefault(); runAction("points", () => onAdjustPoints(pointsForm.email, pointsForm.points, pointsForm.reason), "Player reward points updated and recorded in the audit ledger."); }}>
+                  <div className="panel-heading"><span>PLAYER SUPPORT</span><h2>Adjust reward points</h2><p>Use only for approved promotions, support corrections or testing. Every change is audited.</p></div>
+                  <label>Player email<input type="email" required value={pointsForm.email} onChange={(event) => setPointsForm((current) => ({ ...current, email: event.target.value }))}/></label><label>Point change<input type="number" required min="-1000000" max="1000000" value={pointsForm.points} onChange={(event) => setPointsForm((current) => ({ ...current, points: event.target.value }))}/><small>Use a negative value only for an approved correction.</small></label><label>Reason<input required minLength="5" value={pointsForm.reason} onChange={(event) => setPointsForm((current) => ({ ...current, reason: event.target.value }))}/></label><button className="primary-button" type="submit" disabled={Boolean(busy)}>{busy === "points" ? "Updating…" : "Record point adjustment"}</button>
+                  <div className="admin-player-preview"><strong>Recent players</strong>{players.slice(0, 6).map((player) => <button type="button" key={player.id} onClick={() => setPointsForm((current) => ({ ...current, email: player.email || "" }))}><span>{player.display_name || player.email || "Player"}<small>{player.status}</small></span><b>{formatPoints(player.pointsBalance)} pts</b></button>)}</div>
+                </form>
+              </div>
+              <section className="admin-draw-section"><div className="panel-heading"><span>DRAW CONTROL</span><h2>All lottery draws</h2><p>Publishing is allowed only after draw time. Settlement is atomic and cannot be rerun.</p></div><div className="admin-draw-list">{draws.length === 0 && <p className="empty-state">No draws created yet.</p>}{draws.map((draw) => <article className="content-card admin-draw-card" key={draw.id}><div className="admin-draw-head"><div><span className={`draw-status status-${draw.status}`}>{draw.status}</span><h3>{draw.name}</h3><p>{draw.code} • {draw.ticketCount} tickets</p></div><div><small>Draw time</small><strong>{formatDateTime(draw.draw_at)}</strong></div></div>{draw.result_numbers?.length > 0 ? <div className="ticket-balls ticket-balls--result">{draw.result_numbers.map((number) => <strong key={number}>{String(number).padStart(2, "00")}</strong>)}</div> : <div className="admin-draw-actions">{draw.status === "draft" && <button type="button" className="primary-button" disabled={Boolean(busy)} onClick={() => runAction(`open-${draw.id}`, () => onOpenDraw(draw.id), "Draw is now open for player ticket purchases.")}>{busy === `open-${draw.id}` ? "Opening…" : "Open draw for players"}</button>}{["open", "closed"].includes(draw.status) && <div className="publish-result-form"><input value={resultInputs[draw.id] || ""} onChange={(event) => setResultInputs((current) => ({ ...current, [draw.id]: event.target.value }))} placeholder={`Enter ${draw.picks_required} numbers: 4, 7, 12…`}/><button type="button" disabled={Boolean(busy)} onClick={() => publish(draw)}>{busy === `publish-${draw.id}` ? "Publishing…" : "Publish & settle"}</button></div>}</div>}{["draft", "open", "closed"].includes(draw.status) && <div className="cancel-draw-row"><input value={cancelReasons[draw.id] || ""} onChange={(event) => setCancelReasons((current) => ({ ...current, [draw.id]: event.target.value }))} placeholder="Cancellation reason (required)"/><button type="button" disabled={Boolean(busy) || String(cancelReasons[draw.id] || "").trim().length < 5} onClick={() => runAction(`cancel-${draw.id}`, () => onCancelDraw(draw.id, cancelReasons[draw.id]), "Draw cancelled. Every confirmed ticket was refunded automatically.")}>{busy === `cancel-${draw.id}` ? "Cancelling…" : "Cancel & refund"}</button></div>}<div className="admin-tier-row">{draw.draw_prize_tiers?.map((tier) => <span key={tier.matches_required}>{tier.matches_required} match <strong>{formatPoints(tier.prize_points)} pts</strong></span>)}</div></article>)}</div></section>
+            </>
+          )}
+
+          {adminTab === "players" && (
+            <div style={{marginTop:18}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                <div><span style={{color:"#b88924",fontSize:9,fontWeight:850,letterSpacing:".12em"}}>PLAYER MANAGEMENT</span><h2 style={{margin:"5px 0 0",color:"var(--navy)",fontSize:22}}>All Players</h2></div>
+                <input value={playerSearch} onChange={e=>setPlayerSearch(e.target.value)} placeholder="Search name, email, phone…" style={{width:220,height:42,padding:"0 13px",border:"1px solid var(--border)",borderRadius:12,outline:0,background:"#fbfcfe",color:"var(--ink)",fontSize:13}}/>
+              </div>
+              {filteredPlayers.length === 0 && <p className="empty-state content-card">No players found.</p>}
+              <div style={{display:"grid",gap:12}}>
+                {filteredPlayers.map(player => (
+                  <article key={player.id} className="content-card" style={{padding:"18px 20px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:14}}>
+                        <div style={{width:46,height:46,borderRadius:"50%",background:"linear-gradient(135deg,var(--cyan),var(--navy))",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:18,flexShrink:0}}>
+                          {(player.display_name||player.email||"?")[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{fontWeight:700,fontSize:15,color:"var(--navy)"}}>{player.display_name||"—"}</div>
+                          <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{player.email}</div>
+                          {player.phone&&<div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>{player.phone}</div>}
+                        </div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <span style={{padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:player.status==="active"?"#dff7e8":player.status==="banned"?"#fde9ea":"#fff3cd",color:player.status==="active"?"#167246":player.status==="banned"?"#a43840":"#795e1f"}}>{player.status||"active"}</span>
+                        <span style={{padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:"var(--gold-soft)",color:"#8c6618"}}>{formatPoints(player.pointsBalance)} pts</span>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:8,marginTop:14,paddingTop:12,borderTop:"1px solid var(--border)",flexWrap:"wrap"}}>
+                      <div style={{fontSize:11,color:"var(--muted)",flex:1}}>
+                        {player.age&&<span style={{marginRight:12}}>Age: <strong style={{color:"var(--navy)"}}>{player.age}</strong></span>}
+                        <span>Joined: <strong style={{color:"var(--navy)"}}>{new Date(player.created_at).toLocaleDateString("en-IN")}</strong></span>
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        {player.status !== "active" && (
+                          <button type="button" disabled={updatingPlayer===player.id} onClick={()=>updateStatus(player,"active")} style={{padding:"6px 14px",borderRadius:10,border:"1px solid #bfe5ce",background:"#edf9f2",color:"#167246",fontWeight:700,fontSize:12,cursor:"pointer"}}>✓ Activate</button>
+                        )}
+                        {player.status !== "suspended" && (
+                          <button type="button" disabled={updatingPlayer===player.id} onClick={()=>updateStatus(player,"suspended")} style={{padding:"6px 14px",borderRadius:10,border:"1px solid #ead8a6",background:"var(--gold-soft)",color:"#795e1f",fontWeight:700,fontSize:12,cursor:"pointer"}}>⏸ Hold</button>
+                        )}
+                        {player.status !== "banned" && (
+                          <button type="button" disabled={updatingPlayer===player.id} onClick={()=>updateStatus(player,"banned")} style={{padding:"6px 14px",borderRadius:10,border:"1px solid #efc4c7",background:"#fff0f1",color:"#a43840",fontWeight:700,fontSize:12,cursor:"pointer"}}>🚫 Ban</button>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+
           <p className="responsible-note"><Icon name="shield" size={16}/>This console manages non-cash reward points. Real-money operations require a separate regulated and audited backend.</p>
         </div>
       </div>
@@ -1013,6 +1113,10 @@ export default function App() {
     setAdminData((current) => ({ ...current, draws: current.draws.map((draw) => draw.id === drawId ? { ...draw, status: "published", result_numbers: [...numbers].sort((a, b) => a - b) } : draw) }));
     return { settled_tickets: 0, winning_tickets: 0, awarded_points: 0 };
   };
+  const adminUpdatePlayerStatus = async (playerId, status) => {
+    if (liveBackendActive) return updatePlayerStatus(playerId, status);
+    setAdminData((current) => ({ ...current, players: current.players.map((p) => p.id === playerId ? { ...p, status } : p) }));
+  };
   const adminAdjustPoints = async (email, points, reason) => {
     if (liveBackendActive) return adjustPlayerPoints(email, points, reason);
     setAdminData((current) => ({ ...current, players: current.players.map((player) => player.email === email ? { ...player, pointsBalance: Math.max(0, player.pointsBalance + Number(points)) } : player) }));
@@ -1031,6 +1135,6 @@ export default function App() {
   if (screen === "player-results") return <PlayerResults draws={lotteryDraws} tickets={playerTickets} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-wallet") return <PlayerWallet profile={playerProfile} walletPoints={walletPoints} ledger={walletLedger} settings={playSettings} onSaveSettings={savePlaySettings} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-roulette") return <RouletteGame onNavigate={setScreen} onLogout={logout} onSpin={playRouletteRound}/>;
-  if (screen === "admin-dashboard") return <AdminConsole data={adminData} onCreateDraw={adminCreateDraw} onOpenDraw={adminOpenDraw} onCancelDraw={adminCancelDraw} onPublishResult={adminPublishResult} onAdjustPoints={adminAdjustPoints} onRefresh={loadAdminPortalData} onLogout={logout}/>;
+  if (screen === "admin-dashboard") return <AdminConsole data={adminData} onCreateDraw={adminCreateDraw} onOpenDraw={adminOpenDraw} onCancelDraw={adminCancelDraw} onPublishResult={adminPublishResult} onAdjustPoints={adminAdjustPoints} onUpdatePlayerStatus={adminUpdatePlayerStatus} onRefresh={loadAdminPortalData} onLogout={logout}/>;
   return <PlayerLogin identifier={playerIdentifier} setIdentifier={setPlayerIdentifier} onLogin={playerLogin} onRegister={() => { setPendingRegistration({ name: "", email: "", phone: "", age: "" }); setScreen("player-register"); }} onForgot={() => { setRecoveryEmail(playerIdentifier.includes("@") ? playerIdentifier : ""); setScreen("player-forgot-password"); }} onAdmin={() => setScreen("admin-login")} backendEnabled={liveBackendActive} notice={authNotice}/>;
 }
