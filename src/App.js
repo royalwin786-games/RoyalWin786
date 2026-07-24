@@ -630,6 +630,20 @@ function PlayerWallet({ profile, walletPoints, ledger, settings, onSaveSettings,
   return (
     <PlayerLayout active="player-wallet" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
       <div className="game-page-heading"><div><span>MY ACCOUNT</span><h1>Wallet &amp; play controls</h1><p>{profile?.email || "Player account"}</p></div><div className="wallet-balance-card"><span>Reward points</span><strong>{formatPoints(walletPoints)}</strong></div></div>
+      <div className="wallet-action-buttons">
+        <button type="button" className="wallet-action-btn wallet-action-btn--deposit" onClick={() => onNavigate("player-deposit")}>
+          <span className="wallet-action-icon">💰</span>
+          <span className="wallet-action-label">Add Money</span>
+        </button>
+        <button type="button" className="wallet-action-btn wallet-action-btn--withdraw" onClick={() => onNavigate("player-withdrawal")}>
+          <span className="wallet-action-icon">🏦</span>
+          <span className="wallet-action-label">Withdraw</span>
+        </button>
+        <button type="button" className="wallet-action-btn wallet-action-btn--history" onClick={() => onNavigate("player-transactions")}>
+          <span className="wallet-action-icon">📋</span>
+          <span className="wallet-action-label">History</span>
+        </button>
+      </div>
       <div className="wallet-page-grid">
         <section className="content-card ledger-card"><div className="panel-heading"><span>ACTIVITY</span><h2>Points history</h2></div><div className="ledger-list">{ledger.length === 0 && <p className="empty-state">No points activity yet.</p>}{ledger.map((entry) => <article key={entry.id}><span className={`ledger-icon ${entry.amount >= 0 ? "credit" : "debit"}`}><Icon name={entry.amount >= 0 ? "sparkle" : "ticket"} size={18}/></span><div><strong>{entry.description || entry.reference_type}</strong><small>{formatDateTime(entry.created_at)}</small></div><p className={entry.amount >= 0 ? "credit" : "debit"}>{entry.amount >= 0 ? "+" : ""}{formatPoints(entry.amount)}<small>Balance {formatPoints(entry.balance_after)}</small></p></article>)}</div></section>
         <form className="content-card limits-card" onSubmit={save}><div className="panel-heading"><span>RESPONSIBLE PLAY</span><h2>Your play limits</h2><p>The database blocks new ticket purchases after your daily point limit is reached.</p></div><label>Daily lottery limit<input type="number" min="0" max="100000" value={form.dailyPointLimit} onChange={(event) => setForm((current) => ({ ...current, dailyPointLimit: event.target.value }))}/><small>points per UTC day</small></label><label>Session reminder<input type="number" min="5" max="1440" value={form.sessionLimitMinutes} onChange={(event) => setForm((current) => ({ ...current, sessionLimitMinutes: event.target.value }))}/><small>minutes</small></label>{message && <p className={message.includes("successfully") ? "success-message" : "auth-error"}>{message}</p>}<button className="primary-button" type="submit" disabled={saving}>{saving ? "Saving…" : "Save play limits"}</button><p className="limits-note"><Icon name="shield" size={16}/>Points have no cash value and cannot be withdrawn.</p></form>
@@ -693,7 +707,7 @@ function RouletteGame({ onNavigate, onLogout, onSpin }) {
   );
 }
 
-function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishResult, onAdjustPoints, onRefresh, onLogout }) {
+function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishResult, onAdjustPoints, onUpdatePlayerStatus, onRefresh, onLogout }) {
   const tomorrow = new Date(Date.now() + 86400000);
   const closeTime = new Date(Date.now() + 23 * 3600000);
   const toLocalInput = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -712,6 +726,7 @@ function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishR
   const [pointsForm, setPointsForm] = useState({ email: "", points: 2500, reason: "Promotional reward points" });
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
+  const [adminTab, setAdminTab] = useState("draws");
   const summary = data?.summary || {};
   const draws = data?.draws || [];
   const players = data?.players || [];
@@ -761,7 +776,46 @@ function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishR
             <article><span><Icon name="sparkle" size={22}/></span><p>Awarded<strong>{formatPoints(summary.winner_points)}</strong></p></article>
           </section>
 
-          <div className="admin-workspace-grid">
+          <div className="admin-console-tabs">
+            {[["draws","🎰 Draws"],["payments","💰 Payments"],["players","👥 Players"]].map(([id,label])=>(
+              <button key={id} type="button" className={`admin-console-tab ${adminTab===id?"admin-console-tab--active":""}`} onClick={()=>setAdminTab(id)}>{label}</button>
+            ))}
+          </div>
+
+          {adminTab === "payments" && <AdminPaymentsTab/>}
+
+          {adminTab === "players" && (
+            <div style={{marginTop:18}}>
+              <div style={{marginBottom:14,fontWeight:700,fontSize:14,color:"var(--navy)"}}>All Players ({players.length})</div>
+              {players.length === 0 && <p className="empty-state content-card">No players yet.</p>}
+              {players.map(player => (
+                <div key={player.id} className="content-card" style={{padding:"16px",marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:12}}>
+                      <div style={{width:42,height:42,borderRadius:"50%",background:"linear-gradient(135deg,var(--cyan),var(--navy))",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800,fontSize:17}}>{(player.display_name||player.email||"?")[0].toUpperCase()}</div>
+                      <div>
+                        <div style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>{player.display_name||"—"}</div>
+                        <div style={{fontSize:11,color:"var(--muted)"}}>{player.email}</div>
+                        {player.phone&&<div style={{fontSize:11,color:"var(--muted)"}}>{player.phone}</div>}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:player.status==="active"?"#dcfce7":player.status==="banned"?"#fee2e2":"#fef3c7",color:player.status==="active"?"#166534":player.status==="banned"?"#991b1b":"#92400e"}}>{player.status||"active"}</span>
+                      <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:"#fef9c3",color:"#854d0e"}}>{formatPoints(player.pointsBalance)} pts</span>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:8,marginTop:12,paddingTop:10,borderTop:"1px solid var(--border)",flexWrap:"wrap"}}>
+                    <span style={{fontSize:11,color:"var(--muted)",flex:1}}>Joined: {new Date(player.created_at).toLocaleDateString("en-IN")}</span>
+                    {player.status!=="active"&&<button type="button" onClick={()=>runAction(`status-${player.id}`,()=>onUpdatePlayerStatus(player.id,"active"),"Player activated.")} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #bbf7d0",background:"#dcfce7",color:"#166534",fontWeight:700,fontSize:12,cursor:"pointer"}}>✓ Activate</button>}
+                    {player.status!=="suspended"&&<button type="button" onClick={()=>runAction(`status-${player.id}`,()=>onUpdatePlayerStatus(player.id,"suspended"),"Player suspended.")} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #fde68a",background:"#fef3c7",color:"#92400e",fontWeight:700,fontSize:12,cursor:"pointer"}}>⏸ Hold</button>}
+                    {player.status!=="banned"&&<button type="button" onClick={()=>{if(window.confirm(`Ban ${player.display_name||player.email}?`))runAction(`status-${player.id}`,()=>onUpdatePlayerStatus(player.id,"banned"),"Player banned.");}} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #fecaca",background:"#fee2e2",color:"#991b1b",fontWeight:700,fontSize:12,cursor:"pointer"}}>🚫 Ban</button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {adminTab === "draws" && <div className="admin-workspace-grid">
             <form className="content-card admin-form-card" onSubmit={createDraw}>
               <div className="panel-heading"><span>NEW DRAW</span><h2>Create lottery draw</h2><p>New draws start as drafts and must be opened separately.</p></div>
               <div className="admin-form-grid"><label>Draw code<input required value={drawForm.code} onChange={(event) => setDrawForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}/></label><label>Draw name<input required value={drawForm.name} onChange={(event) => setDrawForm((current) => ({ ...current, name: event.target.value }))}/></label><label>Sales close<input required type="datetime-local" value={drawForm.closesAt} onChange={(event) => setDrawForm((current) => ({ ...current, closesAt: event.target.value }))}/></label><label>Draw time<input required type="datetime-local" value={drawForm.drawAt} onChange={(event) => setDrawForm((current) => ({ ...current, drawAt: event.target.value }))}/></label><label>Maximum number<input required type="number" min="6" max="99" value={drawForm.maxNumber} onChange={(event) => setDrawForm((current) => ({ ...current, maxNumber: event.target.value }))}/></label><label>Numbers to pick<input required type="number" min="4" max="12" value={drawForm.picksRequired} onChange={(event) => setDrawForm((current) => ({ ...current, picksRequired: event.target.value }))}/></label><label>Entry points<input required type="number" min="0" max="100000" value={drawForm.entryPoints} onChange={(event) => setDrawForm((current) => ({ ...current, entryPoints: event.target.value }))}/></label><label>Top reward label<input required value={drawForm.prizeLabel} onChange={(event) => setDrawForm((current) => ({ ...current, prizeLabel: event.target.value }))}/></label></div>
@@ -775,7 +829,11 @@ function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishR
             </form>
           </div>
 
-          <section className="admin-draw-section"><div className="panel-heading"><span>DRAW CONTROL</span><h2>All lottery draws</h2><p>Publishing is allowed only after draw time. Settlement is atomic and cannot be rerun.</p></div><div className="admin-draw-list">{draws.length === 0 && <p className="empty-state">No draws created yet.</p>}{draws.map((draw) => <article className="content-card admin-draw-card" key={draw.id}><div className="admin-draw-head"><div><span className={`draw-status status-${draw.status}`}>{draw.status}</span><h3>{draw.name}</h3><p>{draw.code} • {draw.ticketCount} tickets</p></div><div><small>Draw time</small><strong>{formatDateTime(draw.draw_at)}</strong></div></div>{draw.result_numbers?.length > 0 ? <div className="ticket-balls ticket-balls--result">{draw.result_numbers.map((number) => <strong key={number}>{String(number).padStart(2, "0")}</strong>)}</div> : <div className="admin-draw-actions">{draw.status === "draft" && <button type="button" className="primary-button" disabled={Boolean(busy)} onClick={() => runAction(`open-${draw.id}`, () => onOpenDraw(draw.id), "Draw is now open for player ticket purchases.")}>{busy === `open-${draw.id}` ? "Opening…" : "Open draw for players"}</button>}{["open", "closed"].includes(draw.status) && <div className="publish-result-form"><input value={resultInputs[draw.id] || ""} onChange={(event) => setResultInputs((current) => ({ ...current, [draw.id]: event.target.value }))} placeholder={`Enter ${draw.picks_required} numbers: 4, 7, 12…`}/><button type="button" disabled={Boolean(busy)} onClick={() => publish(draw)}>{busy === `publish-${draw.id}` ? "Publishing…" : "Publish & settle"}</button></div>}</div>}{["draft", "open", "closed"].includes(draw.status) && <div className="cancel-draw-row"><input value={cancelReasons[draw.id] || ""} onChange={(event) => setCancelReasons((current) => ({ ...current, [draw.id]: event.target.value }))} placeholder="Cancellation reason (required)"/><button type="button" disabled={Boolean(busy) || String(cancelReasons[draw.id] || "").trim().length < 5} onClick={() => runAction(`cancel-${draw.id}`, () => onCancelDraw(draw.id, cancelReasons[draw.id]), "Draw cancelled. Every confirmed ticket was refunded automatically.")}>{busy === `cancel-${draw.id}` ? "Cancelling…" : "Cancel & refund"}</button></div>}<div className="admin-tier-row">{draw.draw_prize_tiers?.map((tier) => <span key={tier.matches_required}>{tier.matches_required} match <strong>{formatPoints(tier.prize_points)} pts</strong></span>)}</div></article>)}</div></section>
+          </div>}
+
+          {adminTab === "draws" && <section className="admin-draw-section"><div className="panel-heading"><span>DRAW CONTROL</span><h2>All lottery draws</h2><p>Publishing is allowed only after draw time. Settlement is atomic and cannot be rerun.</p></div><div className="admin-draw-list">{draws.length === 0 && <p className="empty-state">No draws created yet.</p>}{draws.map((draw) => <article className="content-card admin-draw-card" key={draw.id}><div className="admin-draw-head"><div><span className={`draw-status status-${draw.status}`}>{draw.status}</span><h3>{draw.name}</h3><p>{draw.code} • {draw.ticketCount} tickets</p></div><div><small>Draw time</small><strong>{formatDateTime(draw.draw_at)}</strong></div></div>{draw.result_numbers?.length > 0 ? <div className="ticket-balls ticket-balls--result">{draw.result_numbers.map((number) => <strong key={number}>{String(number).padStart(2, "0")}</strong>)}</div> : <div className="admin-draw-actions">{draw.status === "draft" && <button type="button" className="primary-button" disabled={Boolean(busy)} onClick={() => runAction(`open-${draw.id}`, () => onOpenDraw(draw.id), "Draw is now open for player ticket purchases.")}>{busy === `open-${draw.id}` ? "Opening…" : "Open draw for players"}</button>}{["open", "closed"].includes(draw.status) && <div className="publish-result-form"><input value={resultInputs[draw.id] || ""} onChange={(event) => setResultInputs((current) => ({ ...current, [draw.id]: event.target.value }))} placeholder={`Enter ${draw.picks_required} numbers: 4, 7, 12…`}/><button type="button" disabled={Boolean(busy)} onClick={() => publish(draw)}>{busy === `publish-${draw.id}` ? "Publishing…" : "Publish & settle"}</button></div>}</div>}{["draft", "open", "closed"].includes(draw.status) && <div className="cancel-draw-row"><input value={cancelReasons[draw.id] || ""} onChange={(event) => setCancelReasons((current) => ({ ...current, [draw.id]: event.target.value }))} placeholder="Cancellation reason (required)"/><button type="button" disabled={Boolean(busy) || String(cancelReasons[draw.id] || "").trim().length < 5} onClick={() => runAction(`cancel-${draw.id}`, () => onCancelDraw(draw.id, cancelReasons[draw.id]), "Draw cancelled. Every confirmed ticket was refunded automatically.")}>{busy === `cancel-${draw.id}` ? "Cancelling…" : "Cancel & refund"}</button></div>}<div className="admin-tier-row">{draw.draw_prize_tiers?.map((tier) => <span key={tier.matches_required}>{tier.matches_required} match <strong>{formatPoints(tier.prize_points)} pts</strong></span>)}</div></article>)}</div></section>
+          </section>}
+
           <p className="responsible-note"><Icon name="shield" size={16}/>This console manages non-cash reward points. Real-money operations require a separate regulated and audited backend.</p>
         </div>
       </div>
@@ -1237,7 +1295,7 @@ export default function App() {
     if (recoveryModeRequested && liveBackendActive) return "player-reset-password";
     if (process.env.NODE_ENV === "development") {
       const previewScreen = new URLSearchParams(window.location.search).get("screen");
-      const allowedPreviews = ["player-login", "player-register", "player-register-otp", "player-forgot-password", "player-reset-password", "player-dashboard", "player-lottery", "player-tickets", "player-results", "player-wallet", "player-roulette", "admin-login", "admin-dashboard"];
+      const allowedPreviews = ["player-login", "player-register", "player-register-otp", "player-forgot-password", "player-reset-password", "player-dashboard", "player-lottery", "player-tickets", "player-results", "player-wallet", "player-roulette", "player-deposit", "player-withdrawal", "player-transactions", "admin-login", "admin-dashboard"];
       if (allowedPreviews.includes(previewScreen)) return previewScreen;
     }
     return "player-login";
@@ -1442,6 +1500,10 @@ export default function App() {
     setAdminData((current) => ({ ...current, draws: current.draws.map((draw) => draw.id === drawId ? { ...draw, status: "published", result_numbers: [...numbers].sort((a, b) => a - b) } : draw) }));
     return { settled_tickets: 0, winning_tickets: 0, awarded_points: 0 };
   };
+  const adminUpdatePlayerStatus = async (playerId, status) => {
+    const { error } = await requireSupabase().from("profiles").update({ status }).eq("id", playerId);
+    if (error) throw error;
+  };
   const adminAdjustPoints = async (email, points, reason) => {
     if (liveBackendActive) return adjustPlayerPoints(email, points, reason);
     setAdminData((current) => ({ ...current, players: current.players.map((player) => player.email === email ? { ...player, pointsBalance: Math.max(0, player.pointsBalance + Number(points)) } : player) }));
@@ -1459,7 +1521,25 @@ export default function App() {
   if (screen === "player-tickets") return <PlayerTickets tickets={playerTickets} onVerify={verifyPlayerTicket} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-results") return <PlayerResults draws={lotteryDraws} tickets={playerTickets} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-wallet") return <PlayerWallet profile={playerProfile} walletPoints={walletPoints} ledger={walletLedger} settings={playSettings} onSaveSettings={savePlaySettings} onNavigate={setScreen} onLogout={logout}/>;
+  if (screen === "player-deposit") return (
+    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+      <div className="game-page-heading"><div><span>ADD MONEY</span><h1>Deposit Funds</h1><p>Add money to your RoyalWin786 wallet</p></div></div>
+      <DepositScreen profile={playerProfile} walletPoints={walletPoints} onSuccess={loadPlayerPortalData}/>
+    </PlayerLayout>
+  );
+  if (screen === "player-withdrawal") return (
+    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+      <div className="game-page-heading"><div><span>WITHDRAW</span><h1>Request Withdrawal</h1><p>Transfer your winnings to your bank/UPI</p></div></div>
+      <WithdrawalScreen profile={playerProfile} walletPoints={walletPoints} onSuccess={loadPlayerPortalData}/>
+    </PlayerLayout>
+  );
+  if (screen === "player-transactions") return (
+    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+      <div className="game-page-heading"><div><span>HISTORY</span><h1>Transactions</h1><p>Your deposit and withdrawal history</p></div></div>
+      <TransactionsScreen/>
+    </PlayerLayout>
+  );
   if (screen === "player-roulette") return <RouletteGame onNavigate={setScreen} onLogout={logout} onSpin={playRouletteRound}/>;
-  if (screen === "admin-dashboard") return <AdminConsole data={adminData} onCreateDraw={adminCreateDraw} onOpenDraw={adminOpenDraw} onCancelDraw={adminCancelDraw} onPublishResult={adminPublishResult} onAdjustPoints={adminAdjustPoints} onRefresh={loadAdminPortalData} onLogout={logout}/>;
+  if (screen === "admin-dashboard") return <AdminConsole data={adminData} onCreateDraw={adminCreateDraw} onOpenDraw={adminOpenDraw} onCancelDraw={adminCancelDraw} onPublishResult={adminPublishResult} onAdjustPoints={adminAdjustPoints} onUpdatePlayerStatus={adminUpdatePlayerStatus} onRefresh={loadAdminPortalData} onLogout={logout}/>;
   return <PlayerLogin identifier={playerIdentifier} setIdentifier={setPlayerIdentifier} onLogin={playerLogin} onRegister={() => { setPendingRegistration({ name: "", email: "", phone: "", age: "" }); setScreen("player-register"); }} onForgot={() => { setRecoveryEmail(playerIdentifier.includes("@") ? playerIdentifier : ""); setScreen("player-forgot-password"); }} onAdmin={() => setScreen("admin-login")} backendEnabled={liveBackendActive} notice={authNotice}/>;
 }
