@@ -147,35 +147,6 @@ function BrandMark({ compact = false }) {
   );
 }
 
-
-function LoadingScreen({ message = "Loading…" }) {
-  return (
-    <AppFrame className="loading-frame">
-      <div className="loading-screen">
-        <BrandMark />
-        <div className="loading-spinner">
-          <div className="spinner-ring"/>
-          <div className="spinner-ring spinner-ring--2"/>
-          <div className="spinner-ring spinner-ring--3"/>
-        </div>
-        <p className="loading-message">{message}</p>
-      </div>
-    </AppFrame>
-  );
-}
-
-function PageLoader({ message = "Loading…" }) {
-  return (
-    <div className="page-loader">
-      <div className="page-loader-bar"/>
-      <div className="page-loader-content">
-        <div className="inline-spinner"/>
-        <span>{message}</span>
-      </div>
-    </div>
-  );
-}
-
 function AppFrame({ children, className = "" }) {
   return (
     <main className={`app-frame ${className}`}>
@@ -832,9 +803,436 @@ function Countdown({ target }) {
   );
 }
 
+
+// ===== DEPOSIT SCREEN =====
+function DepositScreen({ profile, walletPoints, onSuccess }) {
+  const [settings, setSettings] = useState(null);
+  const [method, setMethod] = useState("upi");
+  const [amount, setAmount] = useState("");
+  const [utrNumber, setUtrNumber] = useState("");
+  const [notes, setNotes] = useState("");
+  const [step, setStep] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    getPaymentSettings().then(setSettings).catch(() => {});
+  }, []);
+
+  const coinsToAdd = settings ? Math.floor(Number(amount) * settings.coins_per_rupee) : 0;
+
+  const submit = async () => {
+    if (!amount || Number(amount) < (settings?.min_deposit || 100)) return setMsg({ type: "error", text: `Minimum deposit ₹${settings?.min_deposit || 100}` });
+    if (method === "upi" && !utrNumber.trim()) return setMsg({ type: "error", text: "Please enter UTR number" });
+    setBusy(true); setMsg(null);
+    try {
+      await submitDeposit({
+        method, amount: Number(amount), coinsToAdd,
+        utrNumber: utrNumber.trim(), notes,
+        playerName: profile?.display_name || "",
+        playerEmail: profile?.email || "",
+      });
+      setMsg({ type: "success", text: "Deposit request submitted! Admin will verify and add coins within 30 mins." });
+      setStep(3);
+      if (onSuccess) onSuccess();
+    } catch (err) {
+      setMsg({ type: "error", text: err.message || "Failed to submit. Try again." });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="wallet-screen">
+      <div className="wallet-balance-card">
+        <span className="wallet-balance-label">Current Balance</span>
+        <span className="wallet-balance-amount">{(walletPoints || 0).toLocaleString()} coins</span>
+      </div>
+
+      {step === 3 ? (
+        <div className="content-card payment-success">
+          <div className="payment-success-icon">✅</div>
+          <h3>Request Submitted!</h3>
+          <p>Your deposit of <strong>₹{amount}</strong> is under review. Coins will be added within 30 minutes after verification.</p>
+          <button className="primary-button" onClick={() => { setStep(1); setAmount(""); setUtrNumber(""); setMsg(null); }}>Make Another Deposit</button>
+        </div>
+      ) : (
+        <div className="content-card">
+          <div className="panel-heading"><span>ADD MONEY</span><h2>Deposit Funds</h2></div>
+          {msg && <div className={`auth-notice ${msg.type === "error" ? "auth-notice--error" : "auth-notice--ok"}`}>{msg.text}</div>}
+
+          <div className="payment-method-tabs">
+            {[["upi", "📱 UPI / QR"], ["cash", "💵 Cash Deposit"]].map(([id, label]) => (
+              <button key={id} type="button" className={`method-tab ${method === id ? "method-tab--active" : ""}`} onClick={() => setMethod(id)}>{label}</button>
+            ))}
+          </div>
+
+          {step === 1 && (
+            <>
+              {method === "upi" && settings && (
+                <div className="upi-details">
+                  {settings.upi_qr_url && <img src={settings.upi_qr_url} alt="UPI QR Code" className="upi-qr"/>}
+                  <div className="upi-id-box">
+                    <span className="upi-id-label">UPI ID</span>
+                    <span className="upi-id-value">{settings.upi_id}</span>
+                    <button type="button" onClick={() => navigator.clipboard?.writeText(settings.upi_id)} className="copy-btn">Copy</button>
+                  </div>
+                  <p className="upi-instruction">Pay using any UPI app, then enter the UTR/reference number below.</p>
+                </div>
+              )}
+              {method === "cash" && settings && (
+                <div className="cash-instructions">
+                  <div className="cash-icon">💵</div>
+                  <p>{settings.cash_deposit_instructions}</p>
+                </div>
+              )}
+              <label className="field-label">Amount (₹)
+                <input type="number" className="text-field" placeholder={`Min ₹${settings?.min_deposit || 100}`} value={amount} onChange={e => setAmount(e.target.value)} min={settings?.min_deposit || 100} max={settings?.max_deposit || 50000}/>
+              </label>
+              {amount && coinsToAdd > 0 && (
+                <div className="coins-preview">You will receive <strong>{coinsToAdd.toLocaleString()} coins</strong></div>
+              )}
+              <button className="primary-button" type="button" disabled={!amount} onClick={() => { if(Number(amount) >= (settings?.min_deposit||100)) setStep(2); else setMsg({type:"error",text:`Min ₹${settings?.min_deposit||100}`}); }}>Continue →</button>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <div className="payment-summary">
+                <div className="summary-row"><span>Amount</span><strong>₹{amount}</strong></div>
+                <div className="summary-row"><span>Coins to receive</span><strong>{coinsToAdd.toLocaleString()}</strong></div>
+                <div className="summary-row"><span>Method</span><strong>{method === "upi" ? "UPI" : "Cash"}</strong></div>
+              </div>
+              {method === "upi" && (
+                <label className="field-label">UTR / Reference Number *
+                  <input type="text" className="text-field" placeholder="12-digit UTR number" value={utrNumber} onChange={e => setUtrNumber(e.target.value)}/>
+                </label>
+              )}
+              <label className="field-label">Notes (optional)
+                <input type="text" className="text-field" placeholder="e.g. Agent name, branch" value={notes} onChange={e => setNotes(e.target.value)}/>
+              </label>
+              <button className="primary-button" type="button" disabled={busy} onClick={submit}>{busy ? "Submitting…" : "Submit Deposit Request"}</button>
+              <button className="text-button" type="button" onClick={() => setStep(1)}>← Back</button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== WITHDRAWAL SCREEN =====
+function WithdrawalScreen({ profile, walletPoints, onSuccess }) {
+  const [settings, setSettings] = useState(null);
+  const [method, setMethod] = useState("upi");
+  const [amount, setAmount] = useState("");
+  const [upiId, setUpiId] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [ifscCode, setIfscCode] = useState("");
+  const [accountHolder, setAccountHolder] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => { getPaymentSettings().then(setSettings).catch(() => {}); }, []);
+
+  const coinsToDeduct = settings ? Math.floor(Number(amount) * settings.coins_per_rupee) : 0;
+  const maxWithdrawable = settings ? Math.floor(walletPoints / settings.coins_per_rupee) : 0;
+
+  const submit = async () => {
+    if (!amount || Number(amount) < (settings?.min_withdrawal || 200)) return setMsg({ type: "error", text: `Minimum withdrawal ₹${settings?.min_withdrawal || 200}` });
+    if (coinsToDeduct > walletPoints) return setMsg({ type: "error", text: "Insufficient coins!" });
+    if (method === "upi" && !upiId.trim()) return setMsg({ type: "error", text: "Enter your UPI ID" });
+    if (method === "bank" && (!accountNumber.trim() || !ifscCode.trim())) return setMsg({ type: "error", text: "Enter bank details" });
+    setBusy(true); setMsg(null);
+    try {
+      await submitWithdrawal({
+        method, amount: Number(amount), coinsToDeduct,
+        upiId, bankName, accountNumber, ifscCode, accountHolder,
+        playerName: profile?.display_name || "",
+        playerEmail: profile?.email || "",
+      });
+      setDone(true);
+      if (onSuccess) onSuccess();
+    } catch (err) {
+      setMsg({ type: "error", text: err.message || "Failed. Try again." });
+    } finally { setBusy(false); }
+  };
+
+  if (done) return (
+    <div className="content-card payment-success">
+      <div className="payment-success-icon">🏦</div>
+      <h3>Withdrawal Requested!</h3>
+      <p>₹{amount} withdrawal is being processed. It will be transferred within 24-48 hours.</p>
+      <p className="withdrawal-note">{settings?.withdrawal_note}</p>
+    </div>
+  );
+
+  return (
+    <div className="wallet-screen">
+      <div className="wallet-balance-card">
+        <span className="wallet-balance-label">Available Balance</span>
+        <span className="wallet-balance-amount">{(walletPoints || 0).toLocaleString()} coins</span>
+        <span className="wallet-balance-sub">Max withdrawable: ₹{maxWithdrawable.toLocaleString()}</span>
+      </div>
+      <div className="content-card">
+        <div className="panel-heading"><span>WITHDRAW</span><h2>Request Withdrawal</h2></div>
+        {msg && <div className={`auth-notice ${msg.type === "error" ? "auth-notice--error" : "auth-notice--ok"}`}>{msg.text}</div>}
+        <div className="payment-method-tabs">
+          {[["upi", "📱 UPI"], ["bank", "🏦 Bank Transfer"]].map(([id, label]) => (
+            <button key={id} type="button" className={`method-tab ${method === id ? "method-tab--active" : ""}`} onClick={() => setMethod(id)}>{label}</button>
+          ))}
+        </div>
+        <label className="field-label">Amount (₹)
+          <input type="number" className="text-field" placeholder={`Min ₹${settings?.min_withdrawal || 200}`} value={amount} onChange={e => setAmount(e.target.value)}/>
+        </label>
+        {amount && coinsToDeduct > 0 && (
+          <div className="coins-preview">Will deduct <strong>{coinsToDeduct.toLocaleString()} coins</strong> from your wallet</div>
+        )}
+        {method === "upi" && (
+          <label className="field-label">Your UPI ID *
+            <input type="text" className="text-field" placeholder="yourname@upi" value={upiId} onChange={e => setUpiId(e.target.value)}/>
+          </label>
+        )}
+        {method === "bank" && (<>
+          <label className="field-label">Account Holder Name *<input type="text" className="text-field" placeholder="As per bank records" value={accountHolder} onChange={e => setAccountHolder(e.target.value)}/></label>
+          <label className="field-label">Bank Name<input type="text" className="text-field" placeholder="e.g. SBI, HDFC" value={bankName} onChange={e => setBankName(e.target.value)}/></label>
+          <label className="field-label">Account Number *<input type="text" className="text-field" placeholder="Enter account number" value={accountNumber} onChange={e => setAccountNumber(e.target.value)}/></label>
+          <label className="field-label">IFSC Code *<input type="text" className="text-field" placeholder="e.g. SBIN0001234" value={ifscCode} onChange={e => setIfscCode(e.target.value).toUpperCase()}/></label>
+        </>)}
+        <button className="primary-button" type="button" disabled={busy} onClick={submit}>{busy ? "Processing…" : "Submit Withdrawal Request"}</button>
+      </div>
+    </div>
+  );
+}
+
+// ===== TRANSACTIONS HISTORY =====
+function TransactionsScreen() {
+  const [deposits, setDeposits] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [tab, setTab] = useState("deposits");
+  useEffect(() => {
+    getPlayerDeposits().then(setDeposits).catch(() => {});
+    getPlayerWithdrawals().then(setWithdrawals).catch(() => {});
+  }, []);
+  const list = tab === "deposits" ? deposits : withdrawals;
+  const statusColor = { pending: "#b45309", approved: "#166534", paid: "#166534", rejected: "#991b1b" };
+  return (
+    <div className="wallet-screen">
+      <div className="payment-method-tabs" style={{marginBottom:16}}>
+        {[["deposits","💰 Deposits"],["withdrawals","🏦 Withdrawals"]].map(([id,label])=>(
+          <button key={id} type="button" className={`method-tab ${tab===id?"method-tab--active":""}`} onClick={()=>setTab(id)}>{label}</button>
+        ))}
+      </div>
+      {list.length === 0 ? <div className="content-card" style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}>No {tab} yet.</div> : list.map(item => (
+        <div key={item.id} className="content-card" style={{padding:"14px 16px",marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:14}}>₹{item.amount} via {(item.method||"").toUpperCase()}</div>
+              <div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>{new Date(item.created_at).toLocaleString("en-IN")}</div>
+              {item.utr_number && <div style={{fontSize:11,color:"var(--muted)"}}>UTR: {item.utr_number}</div>}
+              {item.transaction_id && <div style={{fontSize:11,color:"var(--muted)"}}>TXN: {item.transaction_id}</div>}
+              {item.admin_note && <div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>Note: {item.admin_note}</div>}
+            </div>
+            <div style={{textAlign:"right"}}>
+              <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:`${statusColor[item.status]||"#374151"}22`,color:statusColor[item.status]||"#374151"}}>{item.status}</span>
+              <div style={{fontSize:12,color:"var(--navy)",fontWeight:700,marginTop:4}}>{tab==="deposits"?`+${item.coins_to_add} coins`:`-${item.coins_to_deduct} coins`}</div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ===== ADMIN PAYMENTS TAB =====
+function AdminPaymentsTab() {
+  const [tab, setTab] = useState("deposits");
+  const [deposits, setDeposits] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [payouts, setPayouts] = useState([]);
+  const [settings, setSettings] = useState(null);
+  const [actionInputs, setActionInputs] = useState({});
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState(null);
+
+  const load = async () => {
+    const [d, w, p, s] = await Promise.all([getAllDeposits(), getAllWithdrawals(), getAllPrizePayouts(), getPaymentSettings()]);
+    setDeposits(d); setWithdrawals(w); setPayouts(p); setSettings(s);
+  };
+  useEffect(() => { load().catch(() => {}); }, []);
+
+  const showMsg = (text, type = "success") => { setMsg({ text, type }); setTimeout(() => setMsg(null), 3000); };
+
+  const handleDeposit = async (id, action) => {
+    setBusy(id);
+    try {
+      if (action === "approve") await approveDeposit(id, actionInputs[id] || "");
+      else await rejectDeposit(id, actionInputs[id] || "Rejected by admin");
+      showMsg(`Deposit ${action}d successfully!`);
+      await load();
+    } catch (err) { showMsg(err.message || "Failed", "error"); }
+    finally { setBusy(""); }
+  };
+
+  const handleWithdrawal = async (id, action) => {
+    setBusy(id);
+    try {
+      if (action === "approve") await approveWithdrawal(id, actionInputs[`txn_${id}`] || "", actionInputs[id] || "");
+      else await rejectWithdrawal(id, actionInputs[id] || "Rejected by admin");
+      showMsg(`Withdrawal ${action}d!`);
+      await load();
+    } catch (err) { showMsg(err.message || "Failed", "error"); }
+    finally { setBusy(""); }
+  };
+
+  const handlePayout = async (id, status) => {
+    setBusy(id);
+    try {
+      await updatePrizePayout(id, { status, transactionId: actionInputs[`txn_${id}`] || "", adminNote: actionInputs[id] || "" });
+      showMsg("Payout updated!");
+      await load();
+    } catch (err) { showMsg(err.message || "Failed", "error"); }
+    finally { setBusy(""); }
+  };
+
+  const statusBadge = (status) => {
+    const colors = { pending: ["#fef3c7","#92400e"], approved: ["#d1fae5","#065f46"], paid: ["#d1fae5","#065f46"], rejected: ["#fee2e2","#991b1b"], processing: ["#dbeafe","#1e40af"] };
+    const [bg, color] = colors[status] || ["#f3f4f6","#374151"];
+    return <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:bg,color}}>{status}</span>;
+  };
+
+  return (
+    <div style={{marginTop:18}}>
+      {msg && <div className={`auth-notice ${msg.type==="error"?"auth-notice--error":"auth-notice--ok"}`}>{msg.text}</div>}
+      <div className="payment-method-tabs" style={{marginBottom:16}}>
+        {[["deposits","💰 Deposits"],["withdrawals","🏦 Withdrawals"],["payouts","🏆 Prize Payouts"],["settings","⚙️ Settings"]].map(([id,label])=>(
+          <button key={id} type="button" className={`method-tab ${tab===id?"method-tab--active":""}`} onClick={()=>setTab(id)}>{label}</button>
+        ))}
+      </div>
+
+      {tab === "deposits" && (
+        <div>
+          {deposits.length === 0 && <div className="content-card" style={{textAlign:"center",padding:"30px",color:"var(--muted)"}}>No deposit requests.</div>}
+          {deposits.map(d => (
+            <div key={d.id} className="content-card" style={{padding:"16px",marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14}}>{d.player_name} <span style={{color:"var(--muted)",fontWeight:400,fontSize:12}}>({d.player_email})</span></div>
+                  <div style={{fontSize:13,marginTop:4}}>₹{d.amount} via <strong>{(d.method||"").toUpperCase()}</strong> → <strong style={{color:"var(--cyan)"}}>{d.coins_to_add} coins</strong></div>
+                  {d.utr_number && <div style={{fontSize:12,color:"var(--muted)"}}>UTR: {d.utr_number}</div>}
+                  {d.notes && <div style={{fontSize:12,color:"var(--muted)"}}>Note: {d.notes}</div>}
+                  <div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>{new Date(d.created_at).toLocaleString("en-IN")}</div>
+                </div>
+                {statusBadge(d.status)}
+              </div>
+              {d.status === "pending" && (
+                <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid var(--border)",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                  <input placeholder="Admin note (optional)" value={actionInputs[d.id]||""} onChange={e=>setActionInputs(p=>({...p,[d.id]:e.target.value}))} style={{flex:1,minWidth:180,padding:"7px 12px",borderRadius:8,border:"1px solid var(--border)",fontSize:13,outline:"none"}}/>
+                  <button disabled={busy===d.id} onClick={()=>handleDeposit(d.id,"approve")} style={{padding:"7px 16px",borderRadius:8,border:"1px solid #bbf7d0",background:"#dcfce7",color:"#166534",fontWeight:700,fontSize:13,cursor:"pointer"}}>✓ Approve</button>
+                  <button disabled={busy===d.id} onClick={()=>handleDeposit(d.id,"reject")} style={{padding:"7px 16px",borderRadius:8,border:"1px solid #fecaca",background:"#fee2e2",color:"#991b1b",fontWeight:700,fontSize:13,cursor:"pointer"}}>✗ Reject</button>
+                </div>
+              )}
+              {d.admin_note && <div style={{fontSize:12,color:"var(--muted)",marginTop:8}}>Admin: {d.admin_note}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "withdrawals" && (
+        <div>
+          {withdrawals.length === 0 && <div className="content-card" style={{textAlign:"center",padding:"30px",color:"var(--muted)"}}>No withdrawal requests.</div>}
+          {withdrawals.map(w => (
+            <div key={w.id} className="content-card" style={{padding:"16px",marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14}}>{w.player_name} <span style={{color:"var(--muted)",fontWeight:400,fontSize:12}}>({w.player_email})</span></div>
+                  <div style={{fontSize:13,marginTop:4}}>₹{w.amount} via <strong>{(w.method||"").toUpperCase()}</strong></div>
+                  {w.method==="upi" && w.upi_id && <div style={{fontSize:12,color:"var(--muted)"}}>UPI: {w.upi_id}</div>}
+                  {w.method==="bank" && <div style={{fontSize:12,color:"var(--muted)"}}>{w.bank_name} | {w.account_number} | {w.ifsc_code} | {w.account_holder}</div>}
+                  <div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>{new Date(w.created_at).toLocaleString("en-IN")}</div>
+                </div>
+                {statusBadge(w.status)}
+              </div>
+              {["pending","approved"].includes(w.status) && (
+                <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid var(--border)",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                  <input placeholder="Transaction ID" value={actionInputs[`txn_${w.id}`]||""} onChange={e=>setActionInputs(p=>({...p,[`txn_${w.id}`]:e.target.value}))} style={{flex:1,minWidth:140,padding:"7px 12px",borderRadius:8,border:"1px solid var(--border)",fontSize:13,outline:"none"}}/>
+                  <input placeholder="Admin note" value={actionInputs[w.id]||""} onChange={e=>setActionInputs(p=>({...p,[w.id]:e.target.value}))} style={{flex:1,minWidth:140,padding:"7px 12px",borderRadius:8,border:"1px solid var(--border)",fontSize:13,outline:"none"}}/>
+                  <button disabled={busy===w.id} onClick={()=>handleWithdrawal(w.id,"approve")} style={{padding:"7px 16px",borderRadius:8,border:"1px solid #bbf7d0",background:"#dcfce7",color:"#166534",fontWeight:700,fontSize:13,cursor:"pointer"}}>✓ Mark Paid</button>
+                  <button disabled={busy===w.id} onClick={()=>handleWithdrawal(w.id,"reject")} style={{padding:"7px 16px",borderRadius:8,border:"1px solid #fecaca",background:"#fee2e2",color:"#991b1b",fontWeight:700,fontSize:13,cursor:"pointer"}}>✗ Reject</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "payouts" && (
+        <div>
+          {payouts.length === 0 && <div className="content-card" style={{textAlign:"center",padding:"30px",color:"var(--muted)"}}>No prize payouts.</div>}
+          {payouts.map(p => (
+            <div key={p.id} className="content-card" style={{padding:"16px",marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14}}>{p.player_name}</div>
+                  <div style={{fontSize:12,color:"var(--muted)"}}>{p.draw_name}</div>
+                  <div style={{fontSize:13,marginTop:4}}>Prize: <strong style={{color:"var(--gold)"}}>₹{p.prize_amount}</strong> ({p.prize_points} pts)</div>
+                  {p.upi_id && <div style={{fontSize:12,color:"var(--muted)"}}>UPI: {p.upi_id}</div>}
+                  {p.account_number && <div style={{fontSize:12,color:"var(--muted)"}}>{p.bank_name} | {p.account_number} | {p.ifsc_code}</div>}
+                </div>
+                {statusBadge(p.status)}
+              </div>
+              {["pending","processing"].includes(p.status) && (
+                <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid var(--border)",display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <input placeholder="Transaction ID" value={actionInputs[`txn_${p.id}`]||""} onChange={e=>setActionInputs(pr=>({...pr,[`txn_${p.id}`]:e.target.value}))} style={{flex:1,minWidth:140,padding:"7px 12px",borderRadius:8,border:"1px solid var(--border)",fontSize:13,outline:"none"}}/>
+                  <button disabled={busy===p.id} onClick={()=>handlePayout(p.id,"paid")} style={{padding:"7px 14px",borderRadius:8,border:"1px solid #bbf7d0",background:"#dcfce7",color:"#166534",fontWeight:700,fontSize:13,cursor:"pointer"}}>✓ Mark Paid</button>
+                  <button disabled={busy===p.id} onClick={()=>handlePayout(p.id,"processing")} style={{padding:"7px 14px",borderRadius:8,border:"1px solid #bfdbfe",background:"#dbeafe",color:"#1e40af",fontWeight:700,fontSize:13,cursor:"pointer"}}>Processing</button>
+                  <button disabled={busy===p.id} onClick={()=>handlePayout(p.id,"failed")} style={{padding:"7px 14px",borderRadius:8,border:"1px solid #fecaca",background:"#fee2e2",color:"#991b1b",fontWeight:700,fontSize:13,cursor:"pointer"}}>Failed</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "settings" && settings && (
+        <AdminPaymentSettings settings={settings} onSave={async (updated) => {
+          await updatePaymentSettings(updated);
+          setSettings(updated);
+          showMsg("Payment settings saved!");
+        }}/>
+      )}
+    </div>
+  );
+}
+
+function AdminPaymentSettings({ settings, onSave }) {
+  const [form, setForm] = useState(settings);
+  const [busy, setBusy] = useState(false);
+  const set = (key, val) => setForm(p => ({ ...p, [key]: val }));
+  const save = async () => {
+    setBusy(true);
+    try { await onSave(form); } finally { setBusy(false); }
+  };
+  return (
+    <div className="content-card">
+      <div className="panel-heading"><span>PAYMENT SETTINGS</span><h2>Configure Payments</h2></div>
+      <div className="admin-form-grid">
+        <label>UPI ID<input className="text-field" value={form.upi_id||""} onChange={e=>set("upi_id",e.target.value)}/></label>
+        <label>QR Code Image URL<input className="text-field" placeholder="https://..." value={form.upi_qr_url||""} onChange={e=>set("upi_qr_url",e.target.value)}/></label>
+        <label>Coins per ₹1<input type="number" className="text-field" value={form.coins_per_rupee||1} onChange={e=>set("coins_per_rupee",Number(e.target.value))}/></label>
+        <label>Min Deposit (₹)<input type="number" className="text-field" value={form.min_deposit||100} onChange={e=>set("min_deposit",Number(e.target.value))}/></label>
+        <label>Max Deposit (₹)<input type="number" className="text-field" value={form.max_deposit||50000} onChange={e=>set("max_deposit",Number(e.target.value))}/></label>
+        <label>Min Withdrawal (₹)<input type="number" className="text-field" value={form.min_withdrawal||200} onChange={e=>set("min_withdrawal",Number(e.target.value))}/></label>
+        <label>Max Withdrawal (₹)<input type="number" className="text-field" value={form.max_withdrawal||25000} onChange={e=>set("max_withdrawal",Number(e.target.value))}/></label>
+      </div>
+      <label>Cash Deposit Instructions<textarea className="text-field" rows={3} value={form.cash_deposit_instructions||""} onChange={e=>set("cash_deposit_instructions",e.target.value)} style={{resize:"vertical"}}/></label>
+      <label>Withdrawal Note<input className="text-field" value={form.withdrawal_note||""} onChange={e=>set("withdrawal_note",e.target.value)}/></label>
+      <button className="primary-button" disabled={busy} onClick={save}>{busy?"Saving…":"Save Settings"}</button>
+    </div>
+  );
+}
+
 export default function App() {
-  const [globalLoading, setGlobalLoading] = useState(true);
-  const [loadingMessage, setLoadingMessage] = useState("Loading RoyalWin786…");
   const [screen, setScreen] = useState(() => {
     if (recoveryModeRequested && liveBackendActive) return "player-reset-password";
     if (process.env.NODE_ENV === "development") {
@@ -861,9 +1259,8 @@ export default function App() {
     players: [{ id: "demo-player", display_name: "Demo player", email: "player@example.com", status: "active", pointsBalance: 2450 }],
   });
 
-  const loadPlayerPortalData = async (showLoader = false) => {
-    if (showLoader) { setGlobalLoading(true); setLoadingMessage("Refreshing…"); }
-    if (!liveBackendActive) { if (showLoader) setGlobalLoading(false); return; }
+  const loadPlayerPortalData = async () => {
+    if (!liveBackendActive) return;
     const [draw, draws, tickets, wallet, ledger, settings] = await Promise.all([
       getFeaturedLotteryDraw(),
       getLotteryDraws(),
@@ -878,14 +1275,11 @@ export default function App() {
     setWalletPoints(Number(wallet.points_balance));
     setWalletLedger(ledger);
     setPlaySettings(settings);
-    setGlobalLoading(false);
   };
 
-  const loadAdminPortalData = async (showLoader = false) => {
-    if (showLoader) { setGlobalLoading(true); setLoadingMessage("Refreshing data…"); }
-    if (!liveBackendActive) { if (showLoader) setGlobalLoading(false); return; }
+  const loadAdminPortalData = async () => {
+    if (!liveBackendActive) return;
     setAdminData(await getAdminLotteryData());
-    setGlobalLoading(false);
   };
 
   useEffect(() => {
@@ -893,35 +1287,30 @@ export default function App() {
   }, [screen]);
 
   useEffect(() => {
-    if (!liveBackendActive) { setGlobalLoading(false); return undefined; }
+    if (!liveBackendActive) return undefined;
     let cancelled = false;
     const restoreSession = async () => {
       try {
         const identity = await getCurrentIdentity();
-        if (!identity || cancelled) { setGlobalLoading(false); return; }
+        if (!identity || cancelled) return;
         if (recoveryModeRequested) {
           setScreen("player-reset-password");
-          setGlobalLoading(false);
           return;
         }
         if (identity.profile.role === "admin") {
-          setLoadingMessage("Loading admin panel…");
           await loadAdminPortalData();
           if (cancelled) return;
           setScreen("admin-dashboard");
-          setGlobalLoading(false);
           return;
         }
-        setLoadingMessage("Loading your lobby…");
         await loadPlayerPortalData();
         if (!cancelled) {
           setPlayerProfile(identity.profile);
           setPlayerIdentifier(identity.profile.email || "");
           setScreen("player-dashboard");
-          setGlobalLoading(false);
         }
       } catch {
-        setGlobalLoading(false);
+        // Keep the public login visible if a stored session is expired or incomplete.
       }
     };
     restoreSession();
@@ -929,7 +1318,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!liveBackendActive) { setGlobalLoading(false); return undefined; }
+    if (!liveBackendActive) return undefined;
     return subscribeToAuthChanges((event) => {
       if (event === "PASSWORD_RECOVERY") setScreen("player-reset-password");
     });
@@ -961,8 +1350,6 @@ export default function App() {
   const playerLogin = async ({ identifier, password }) => {
     if (liveBackendActive) {
       const identity = await signInPlayer(identifier, password);
-      setGlobalLoading(true);
-      setLoadingMessage("Loading your lobby…");
       await loadPlayerPortalData();
       setPlayerProfile(identity.profile);
     } else {
@@ -970,7 +1357,6 @@ export default function App() {
     }
     setAuthNotice("");
     setScreen("player-dashboard");
-    setGlobalLoading(false);
   };
   const sendPasswordRecovery = async () => {
     if (liveBackendActive) await requestPasswordReset(recoveryEmail, getAuthRedirectUrl(true));
@@ -987,13 +1373,10 @@ export default function App() {
   };
   const adminLogin = async ({ userId, password }) => {
     if (liveBackendActive) {
-      setGlobalLoading(true);
-      setLoadingMessage("Verifying admin credentials…");
       await signInAdmin(userId, password);
       await loadAdminPortalData();
     }
     setScreen("admin-dashboard");
-    setGlobalLoading(false);
   };
   const logout = async () => {
     try { if (liveBackendActive) await signOut(); }
@@ -1065,7 +1448,6 @@ export default function App() {
     return 0;
   };
 
-  if (globalLoading) return <LoadingScreen message={loadingMessage}/>;
   if (screen === "player-login") return <PlayerLogin identifier={playerIdentifier} setIdentifier={setPlayerIdentifier} onLogin={playerLogin} onRegister={() => { setPendingRegistration({ name: "", email: "", phone: "", age: "" }); setScreen("player-register"); }} onForgot={() => { setRecoveryEmail(playerIdentifier.includes("@") ? playerIdentifier : ""); setScreen("player-forgot-password"); }} onAdmin={() => setScreen("admin-login")} backendEnabled={liveBackendActive} notice={authNotice}/>;
   if (screen === "player-register") return <PlayerRegistration initial={pendingRegistration} onBack={() => setScreen("player-login")} onRegister={registerNewPlayer} backendEnabled={liveBackendActive}/>;
   if (screen === "player-register-otp") return <RegistrationOtp email={pendingRegistration.email} onBack={() => setScreen("player-register")} onVerify={verifyPlayerOtp} onResend={resendPlayerOtp} backendEnabled={liveBackendActive}/>;
@@ -1078,6 +1460,6 @@ export default function App() {
   if (screen === "player-results") return <PlayerResults draws={lotteryDraws} tickets={playerTickets} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-wallet") return <PlayerWallet profile={playerProfile} walletPoints={walletPoints} ledger={walletLedger} settings={playSettings} onSaveSettings={savePlaySettings} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-roulette") return <RouletteGame onNavigate={setScreen} onLogout={logout} onSpin={playRouletteRound}/>;
-  if (screen === "admin-dashboard") return <AdminConsole data={adminData} onCreateDraw={adminCreateDraw} onOpenDraw={adminOpenDraw} onCancelDraw={adminCancelDraw} onPublishResult={adminPublishResult} onAdjustPoints={adminAdjustPoints} onRefresh={() => loadAdminPortalData(true)} onLogout={logout}/>;
+  if (screen === "admin-dashboard") return <AdminConsole data={adminData} onCreateDraw={adminCreateDraw} onOpenDraw={adminOpenDraw} onCancelDraw={adminCancelDraw} onPublishResult={adminPublishResult} onAdjustPoints={adminAdjustPoints} onRefresh={loadAdminPortalData} onLogout={logout}/>;
   return <PlayerLogin identifier={playerIdentifier} setIdentifier={setPlayerIdentifier} onLogin={playerLogin} onRegister={() => { setPendingRegistration({ name: "", email: "", phone: "", age: "" }); setScreen("player-register"); }} onForgot={() => { setRecoveryEmail(playerIdentifier.includes("@") ? playerIdentifier : ""); setScreen("player-forgot-password"); }} onAdmin={() => setScreen("admin-login")} backendEnabled={liveBackendActive} notice={authNotice}/>;
 }
