@@ -408,6 +408,7 @@ function PlayerHeader({ active, onNavigate, onLogout }) {
     { label: "Lottery", icon: "ticket", screen: "player-lottery" },
     { label: "My Tickets", icon: "document", screen: "player-tickets" },
     { label: "Results", icon: "trophy", screen: "player-results" },
+    { label: "Card Games", icon: "game", screen: "player-cards" },
     { label: "Wallet", icon: "wallet", screen: "player-wallet" },
     { label: "Roulette", icon: "game", screen: "player-roulette" },
   ];
@@ -428,6 +429,7 @@ function PlayerBottomMenu({ active, onNavigate }) {
     { label: "Lottery", icon: "ticket", screen: "player-lottery" },
     { label: "Tickets", icon: "document", screen: "player-tickets" },
     { label: "Results", icon: "trophy", screen: "player-results" },
+    { label: "Card Games", icon: "game", screen: "player-cards" },
     { label: "Wallet", icon: "wallet", screen: "player-wallet" },
   ];
   return (
@@ -486,6 +488,9 @@ function PlayerDashboard({ profile, tickets, walletPoints, draw, latestResult, o
           </button>
           <button type="button" className="game-choice-card game-choice-card--roulette" onClick={() => onNavigate("player-roulette")}>
             <span className="game-badge">BONUS GAME</span><Icon name="game" size={42}/><h3>Royal Roulette</h3><p>A quick demo-points game between weekly draws.</p><strong>Open roulette →</strong>
+          </button>
+          <button type="button" className="game-choice-card game-choice-card--cards" onClick={() => onNavigate("player-cards")}>
+            <span className="game-badge">CARD GAMES</span><span style={{fontSize:42}}>🃏</span><h3>Card Games</h3><p>Teen Patti, Andar Bahar & Rummy — play vs AI.</p><strong>Play cards →</strong>
           </button>
         </div>
       </section>
