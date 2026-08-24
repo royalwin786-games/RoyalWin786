@@ -824,3 +824,18 @@ button { -webkit-tap-highlight-color: transparent; }
 .payment-success h3 { margin: 0 0 10px; font-size: 22px; color: var(--navy); }
 .payment-success p { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
 .withdrawal-note { font-size: 12px !important; color: var(--muted) !important; }
+
+/* Card Games choice card */
+.game-choice-card--cards {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%);
+  border: 1px solid #3b82f6;
+}
+.game-choice-card--cards .game-badge {
+  background: rgba(255,255,255,0.15);
+  color: white;
+}
+.game-choice-card--cards h3,
+.game-choice-card--cards p,
+.game-choice-card--cards strong {
+  color: white;
+}
