@@ -410,6 +410,7 @@ function PlayerHeader({ active, onNavigate, onLogout }) {
     { label: "My Tickets", icon: "document", screen: "player-tickets" },
     { label: "Results", icon: "trophy", screen: "player-results" },
     { label: "Wallet", icon: "wallet", screen: "player-wallet" },
+    { label: "Card Games", icon: "cards", screen: "player-cards" },
     { label: "Roulette", icon: "game", screen: "player-roulette" },
   ];
   return (
@@ -430,6 +431,7 @@ function PlayerBottomMenu({ active, onNavigate }) {
     { label: "Tickets", icon: "document", screen: "player-tickets" },
     { label: "Results", icon: "trophy", screen: "player-results" },
     { label: "Wallet", icon: "wallet", screen: "player-wallet" },
+    { label: "Cards", icon: "cards", screen: "player-cards" },
   ];
   return (
     <nav className="bottom-menu player-bottom-menu" aria-label="Player navigation">
@@ -487,6 +489,9 @@ function PlayerDashboard({ profile, tickets, walletPoints, draw, latestResult, o
           </button>
           <button type="button" className="game-choice-card game-choice-card--roulette" onClick={() => onNavigate("player-roulette")}>
             <span className="game-badge">BONUS GAME</span><Icon name="game" size={42}/><h3>Royal Roulette</h3><p>A quick demo-points game between weekly draws.</p><strong>Open roulette →</strong>
+          </button>
+          <button type="button" className="game-choice-card game-choice-card--cards" onClick={() => onNavigate("player-cards")}>
+            <span className="game-badge">CARD GAMES</span><span style={{fontSize:42}}>🃏</span><h3>Card Games</h3><p>Teen Patti, Andar Bahar & Rummy — play vs AI.</p><strong>Play cards →</strong>
           </button>
         </div>
       </section>
@@ -1806,7 +1811,7 @@ export default function App() {
   if (screen === "player-card-teen-patti") return (
     <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <div className="game-page-heading"><div><span>TEEN PATTI</span><h1>3 Patti</h1><button type="button" onClick={() => setScreen("player-cards")} style={{fontSize:12,color:"var(--cyan)",background:"none",border:"none",cursor:"pointer",padding:0}}>← Back to Games</button></div></div>
-      <CardGameScreen game="teen-patti" walletPoints={walletPoints} setWalletPoints={(fn) => { const newVal = typeof fn === "function" ? fn(walletPoints) : fn; setWalletPoints(newVal); const users = {}; }} onExit={() => setScreen("player-cards")}/>
+      <CardGameScreen game="teen-patti" walletPoints={walletPoints} setWalletPoints={setWalletPoints} onExit={() => setScreen("player-cards")}/>
     </PlayerLayout>
   );
   if (screen === "player-card-andar-bahar") return (
