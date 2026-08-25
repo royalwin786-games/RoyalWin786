@@ -1,3 +1,4 @@
+import { resolveOutcome, getHouseSettings } from "./services/resultControlService";
 import { useState, useEffect, useCallback, useRef } from "react";
 
 // ===== CARD ENGINE =====
@@ -116,13 +117,38 @@ function TeenPatti({ walletPoints, setWalletPoints, onExit }) {
     setPhase("result");
   };
 
-  const aiTurn = useCallback((playerBet) => {
+  const aiTurn = useCallback(async (playerBet) => {
     setAiThinking(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       setAiThinking(false);
+      // Check admin outcome control
+      let forcedOutcome = null;
+      try {
+        const hs = await getHouseSettings();
+        const ctrl = await resolveOutcome(profile?.email || "", "teen-patti", hs);
+        if (ctrl.source === "forced") forcedOutcome = ctrl.outcome;
+        else if (ctrl.outcome === "lose") forcedOutcome = "lose";
+        else if (ctrl.outcome === "win") forcedOutcome = "win";
+      } catch {}
+
       const aiHand = getTeenPattiRank(aiCards);
       const rand = Math.random();
-      // AI folds on bad hand sometimes
+
+      if (forcedOutcome === "win") {
+        // Force player to win - AI folds
+        setAiFolded(true);
+        setWalletPoints(w => w + pot + playerBet);
+        setResult({ winner: "player", reason: "AI folded!" });
+        setPhase("result");
+        return;
+      }
+      if (forcedOutcome === "lose") {
+        // Force player to lose - go to showdown but AI wins
+        setPot(p => p + playerBet);
+        showdown(true);
+        return;
+      }
+      // Normal AI behavior
       if (aiHand.rank <= 1 && rand < 0.35) {
         setAiFolded(true);
         setWalletPoints(w => w + pot + playerBet);
@@ -130,21 +156,19 @@ function TeenPatti({ walletPoints, setWalletPoints, onExit }) {
         setPhase("result");
         return;
       }
-      // AI calls
       setPot(p => p + playerBet);
       setMsg("AI called!");
-      // Auto showdown after AI calls 3 times
       if (Math.random() < 0.4) showdown();
     }, 1200);
   }, [aiCards, pot]);
 
-  const showdown = useCallback(() => {
+  const showdown = useCallback((forceAiWin = false) => {
     setPhase("showdown");
     setTimeout(() => {
       const playerHand = getTeenPattiRank(playerCards);
       const aiHand = getTeenPattiRank(aiCards);
       let winner, reason;
-      if (playerHand.rank > aiHand.rank || (playerHand.rank === aiHand.rank && playerHand.score >= aiHand.score)) {
+      if (!forceAiWin && (playerHand.rank > aiHand.rank || (playerHand.rank === aiHand.rank && playerHand.score >= aiHand.score))) {
         winner = "player";
         reason = `Your ${playerHand.name} beats AI's ${aiHand.name}!`;
         setWalletPoints(w => w + pot);
@@ -293,19 +317,33 @@ function AndarBahar({ walletPoints, setWalletPoints, onExit }) {
     dealCards(deck, jokerCard, selectedSide);
   };
 
-  const dealCards = (deck, jokerCard, selectedSide) => {
+  const dealCards = async (deck, jokerCard, selectedSide) => {
+    // Check admin outcome control first
+    let forcedOutcome = null;
+    try {
+      const hs = await getHouseSettings();
+      const ctrl = await resolveOutcome("", "andar-bahar", hs);
+      if (ctrl.outcome === "win") forcedOutcome = selectedSide;
+      else if (ctrl.outcome === "lose") forcedOutcome = selectedSide === "andar" ? "bahar" : "andar";
+    } catch {}
+
     const andar = [], bahar = [];
     let found = false, winner = null, idx = 0;
     while (!found && idx < deck.length) {
       const card = deck[idx++];
       if (andar.length <= bahar.length) {
         andar.push(card);
-        if (card.rank === jokerCard.rank) { found = true; winner = "andar"; }
+        if (forcedOutcome ? andar.length >= 3 && forcedOutcome === "andar" && winner === null : card.rank === jokerCard.rank) {
+          found = true; winner = "andar";
+          if (!forcedOutcome) {}
+        } else if (!forcedOutcome && card.rank === jokerCard.rank) { found = true; winner = "andar"; }
       } else {
         bahar.push(card);
-        if (card.rank === jokerCard.rank) { found = true; winner = "bahar"; }
+        if (!forcedOutcome && card.rank === jokerCard.rank) { found = true; winner = "bahar"; }
+        else if (forcedOutcome === "bahar" && bahar.length >= 3 && winner === null) { found = true; winner = "bahar"; }
       }
     }
+    if (forcedOutcome && !winner) winner = forcedOutcome;
     // Animate dealing
     let i = 0;
     const total = andar.length + bahar.length;

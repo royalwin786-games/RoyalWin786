@@ -1,3 +1,4 @@
+import { getHouseSettings, updateHouseSettings, setDrawResultControl, getDrawResultControl, getScheduledResults, scheduleResult, cancelScheduledResult, getPlayerGameControls, setPlayerGameControl, removePlayerGameControl } from "./services/resultControlService";
 import CardGameScreen, { CardGamesLobby } from "./CardGames";
 import { useEffect, useState } from "react";
 import { isSupabaseConfigured } from "./lib/supabase";
@@ -408,7 +409,6 @@ function PlayerHeader({ active, onNavigate, onLogout }) {
     { label: "Lottery", icon: "ticket", screen: "player-lottery" },
     { label: "My Tickets", icon: "document", screen: "player-tickets" },
     { label: "Results", icon: "trophy", screen: "player-results" },
-    { label: "Card Games", icon: "game", screen: "player-cards" },
     { label: "Wallet", icon: "wallet", screen: "player-wallet" },
     { label: "Roulette", icon: "game", screen: "player-roulette" },
   ];
@@ -429,7 +429,6 @@ function PlayerBottomMenu({ active, onNavigate }) {
     { label: "Lottery", icon: "ticket", screen: "player-lottery" },
     { label: "Tickets", icon: "document", screen: "player-tickets" },
     { label: "Results", icon: "trophy", screen: "player-results" },
-    { label: "Card Games", icon: "game", screen: "player-cards" },
     { label: "Wallet", icon: "wallet", screen: "player-wallet" },
   ];
   return (
@@ -488,9 +487,6 @@ function PlayerDashboard({ profile, tickets, walletPoints, draw, latestResult, o
           </button>
           <button type="button" className="game-choice-card game-choice-card--roulette" onClick={() => onNavigate("player-roulette")}>
             <span className="game-badge">BONUS GAME</span><Icon name="game" size={42}/><h3>Royal Roulette</h3><p>A quick demo-points game between weekly draws.</p><strong>Open roulette →</strong>
-          </button>
-          <button type="button" className="game-choice-card game-choice-card--cards" onClick={() => onNavigate("player-cards")}>
-            <span className="game-badge">CARD GAMES</span><span style={{fontSize:42}}>🃏</span><h3>Card Games</h3><p>Teen Patti, Andar Bahar & Rummy — play vs AI.</p><strong>Play cards →</strong>
           </button>
         </div>
       </section>
@@ -783,12 +779,13 @@ function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishR
           </section>
 
           <div className="admin-console-tabs">
-            {[["draws","🎰 Draws"],["payments","💰 Payments"],["players","👥 Players"]].map(([id,label])=>(
+            {[["draws","🎰 Draws"],["payments","💰 Payments"],["players","👥 Players"],["results","🎯 Results Control"]].map(([id,label])=>(
               <button key={id} type="button" className={`admin-console-tab ${adminTab===id?"admin-console-tab--active":""}`} onClick={()=>setAdminTab(id)}>{label}</button>
             ))}
           </div>
 
           {adminTab === "payments" && <AdminPaymentsTab/>}
+          {adminTab === "results" && <AdminResultControl draws={draws} players={players}/>}
 
           {adminTab === "players" && (
             <div style={{marginTop:18}}>
@@ -1290,6 +1287,263 @@ function AdminPaymentSettings({ settings, onSave }) {
       <label>Cash Deposit Instructions<textarea className="text-field" rows={3} value={form.cash_deposit_instructions||""} onChange={e=>set("cash_deposit_instructions",e.target.value)} style={{resize:"vertical"}}/></label>
       <label>Withdrawal Note<input className="text-field" value={form.withdrawal_note||""} onChange={e=>set("withdrawal_note",e.target.value)}/></label>
       <button className="primary-button" disabled={busy} onClick={save}>{busy?"Saving…":"Save Settings"}</button>
+    </div>
+  );
+}
+
+
+// ===== ADMIN RESULT CONTROL TAB =====
+function AdminResultControl({ draws, players }) {
+  const [tab, setTab] = useState("lottery");
+  const [houseSettings, setHouseSettings] = useState(null);
+  const [playerControls, setPlayerControls] = useState([]);
+  const [scheduledResults, setScheduledResults] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  // Lottery control form
+  const [selDrawId, setSelDrawId] = useState("");
+  const [winNumbers, setWinNumbers] = useState("");
+  const [forcedWinner, setForcedWinner] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("");
+  const [announceNow, setAnnounceNow] = useState(false);
+
+  // Player control form
+  const [pcEmail, setPcEmail] = useState("");
+  const [pcGame, setPcGame] = useState("all");
+  const [pcOutcome, setPcOutcome] = useState("house_edge");
+  const [pcEdge, setPcEdge] = useState(50);
+  const [pcStreakLimit, setPcStreakLimit] = useState(3);
+  const [pcNote, setPcNote] = useState("");
+
+  const showMsg = (text, type = "success") => { setMsg({ text, type }); setTimeout(() => setMsg(null), 3500); };
+
+  useEffect(() => {
+    getHouseSettings().then(setHouseSettings).catch(() => {});
+    getPlayerGameControls().then(setPlayerControls).catch(() => {});
+    getScheduledResults().then(setScheduledResults).catch(() => {});
+  }, []);
+
+  const saveHouseSettings = async () => {
+    setBusy(true);
+    try { await updateHouseSettings(houseSettings); showMsg("House settings saved!"); }
+    catch (e) { showMsg(e.message, "error"); }
+    finally { setBusy(false); }
+  };
+
+  const saveLotteryControl = async () => {
+    if (!selDrawId) return showMsg("Select a draw first!", "error");
+    const nums = winNumbers.split(",").map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+    if (nums.length === 0) return showMsg("Enter winning numbers!", "error");
+    setBusy(true);
+    try {
+      await setDrawResultControl({
+        drawId: selDrawId,
+        winningNumbers: nums,
+        forcedWinnerEmail: forcedWinner.trim() || null,
+        announceAt: scheduleTime ? new Date(scheduleTime).toISOString() : null,
+      });
+      if (scheduleTime && !announceNow) {
+        const draw = draws.find(d => d.id === selDrawId);
+        await scheduleResult({
+          drawId: selDrawId, drawName: draw?.name || "Draw",
+          winningNumbers: nums, forcedWinnerEmail: forcedWinner.trim() || null,
+          scheduledAt: new Date(scheduleTime).toISOString(),
+        });
+        getScheduledResults().then(setScheduledResults).catch(() => {});
+      }
+      showMsg("Draw result control saved!");
+      setWinNumbers(""); setForcedWinner(""); setScheduleTime("");
+    } catch (e) { showMsg(e.message, "error"); }
+    finally { setBusy(false); }
+  };
+
+  const savePlayerControl = async () => {
+    if (!pcEmail.trim()) return showMsg("Enter player email!", "error");
+    setBusy(true);
+    try {
+      await setPlayerGameControl({
+        playerEmail: pcEmail.trim(), gameType: pcGame,
+        outcomeControl: pcOutcome, houseEdgePercent: pcEdge,
+        winStreakLimit: pcStreakLimit, note: pcNote,
+      });
+      getPlayerGameControls().then(setPlayerControls).catch(() => {});
+      showMsg(`Control set for ${pcEmail}!`);
+      setPcEmail(""); setPcNote("");
+    } catch (e) { showMsg(e.message, "error"); }
+    finally { setBusy(false); }
+  };
+
+  const removeControl = async (id) => {
+    await removePlayerGameControl(id);
+    getPlayerGameControls().then(setPlayerControls).catch(() => {});
+    showMsg("Control removed!");
+  };
+
+  const outcomeLabel = { force_win: "🏆 Always Win", force_loss: "❌ Always Lose", house_edge: "⚖️ House Edge", random: "🎲 Random" };
+  const gameLabel = { all: "All Games", "teen-patti": "Teen Patti", "andar-bahar": "Andar Bahar", rummy: "Rummy", roulette: "Roulette" };
+
+  const inputStyle = { width: "100%", padding: "10px 13px", borderRadius: 10, border: "1px solid var(--border)", background: "#fbfcfe", color: "var(--ink)", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 10 };
+  const labelStyle = { fontSize: 11, fontWeight: 700, color: "var(--muted)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4, display: "block" };
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      {msg && <div style={{ padding: "10px 14px", borderRadius: 10, fontSize: 13, marginBottom: 12, background: msg.type === "error" ? "#fee2e2" : "#d1fae5", color: msg.type === "error" ? "#991b1b" : "#065f46", border: `1px solid ${msg.type === "error" ? "#fca5a5" : "#6ee7b7"}` }}>{msg.text}</div>}
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {[["lottery", "🎰 Lottery Results"], ["players", "👤 Player Control"], ["schedule", "🕐 Scheduled"], ["house", "🏠 House Settings"]].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setTab(id)} style={{ padding: "8px 16px", borderRadius: 20, border: `1.5px solid ${tab === id ? "var(--cyan)" : "var(--border)"}`, background: tab === id ? "#e0f2fe" : "white", color: tab === id ? "var(--navy)" : "var(--muted)", fontWeight: tab === id ? 800 : 600, fontSize: 13, cursor: "pointer" }}>{label}</button>
+        ))}
+      </div>
+
+      {/* LOTTERY RESULTS TAB */}
+      {tab === "lottery" && (
+        <div className="content-card">
+          <div className="panel-heading"><span>LOTTERY CONTROL</span><h2>Set Draw Result</h2><p>Control winning numbers and force specific player to win.</p></div>
+          <label style={labelStyle}>Select Draw</label>
+          <select value={selDrawId} onChange={e => setSelDrawId(e.target.value)} style={inputStyle}>
+            <option value="">-- Select a draw --</option>
+            {draws.filter(d => ["open", "closed", "draft"].includes(d.status)).map(d => (
+              <option key={d.id} value={d.id}>{d.name} ({d.status}) — {d.code}</option>
+            ))}
+          </select>
+          <label style={labelStyle}>Winning Numbers (comma separated)</label>
+          <input style={inputStyle} placeholder="e.g. 4, 12, 23, 31, 42, 7" value={winNumbers} onChange={e => setWinNumbers(e.target.value)} />
+          <label style={labelStyle}>Force Specific Winner Email (optional)</label>
+          <select style={inputStyle} value={forcedWinner} onChange={e => setForcedWinner(e.target.value)}>
+            <option value="">-- Random winner from ticket holders --</option>
+            {players.map(p => <option key={p.id} value={p.email}>{p.display_name || p.email} ({p.email})</option>)}
+          </select>
+          <label style={labelStyle}>Schedule Announce Time (optional)</label>
+          <input type="datetime-local" style={inputStyle} value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <input type="checkbox" id="announceNow" checked={announceNow} onChange={e => setAnnounceNow(e.target.checked)} />
+            <label htmlFor="announceNow" style={{ fontSize: 13, color: "var(--muted)", cursor: "pointer" }}>Announce immediately (ignore schedule time)</label>
+          </div>
+          <button disabled={busy} onClick={saveLotteryControl} style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, var(--navy), var(--cyan))", color: "white", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
+            {busy ? "Saving…" : "💾 Save Result Control"}
+          </button>
+        </div>
+      )}
+
+      {/* PLAYER GAME CONTROL TAB */}
+      {tab === "players" && (
+        <div>
+          <div className="content-card" style={{ marginBottom: 14 }}>
+            <div className="panel-heading"><span>PLAYER CONTROL</span><h2>Set Per-Player Outcome</h2><p>Control win/loss for specific players in any game.</p></div>
+            <label style={labelStyle}>Player Email</label>
+            <select style={inputStyle} value={pcEmail} onChange={e => setPcEmail(e.target.value)}>
+              <option value="">-- Select player --</option>
+              {players.map(p => <option key={p.id} value={p.email}>{p.display_name || p.email}</option>)}
+            </select>
+            <label style={labelStyle}>Game</label>
+            <select style={inputStyle} value={pcGame} onChange={e => setPcGame(e.target.value)}>
+              {Object.entries(gameLabel).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+            <label style={labelStyle}>Outcome Control</label>
+            <select style={inputStyle} value={pcOutcome} onChange={e => setPcOutcome(e.target.value)}>
+              <option value="force_win">🏆 Always Win</option>
+              <option value="force_loss">❌ Always Lose</option>
+              <option value="house_edge">⚖️ House Edge (% chance)</option>
+              <option value="random">🎲 Random (normal)</option>
+            </select>
+            {pcOutcome === "house_edge" && (
+              <>
+                <label style={labelStyle}>House Edge % (player wins if above this %)</label>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <input type="range" min={0} max={100} value={pcEdge} onChange={e => setPcEdge(Number(e.target.value))} style={{ flex: 1 }} />
+                  <span style={{ fontWeight: 700, color: "var(--navy)", minWidth: 40 }}>{pcEdge}%</span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
+                  Player wins ~{100 - pcEdge}% of the time. House edge: {pcEdge}%
+                </div>
+                <label style={labelStyle}>Max Win Streak Before Forcing Loss</label>
+                <input type="number" style={inputStyle} min={1} max={20} value={pcStreakLimit} onChange={e => setPcStreakLimit(Number(e.target.value))} />
+              </>
+            )}
+            <label style={labelStyle}>Note (internal only)</label>
+            <input style={inputStyle} placeholder="e.g. VIP player, promotional win" value={pcNote} onChange={e => setPcNote(e.target.value)} />
+            <button disabled={busy} onClick={savePlayerControl} style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, var(--navy), var(--cyan))", color: "white", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
+              {busy ? "Saving…" : "💾 Set Player Control"}
+            </button>
+          </div>
+
+          {/* Active controls list */}
+          <div className="panel-heading" style={{ marginBottom: 10 }}><span>ACTIVE CONTROLS</span><h2>Current Player Overrides</h2></div>
+          {playerControls.filter(c => c.active).length === 0 && <p className="empty-state content-card">No active player controls.</p>}
+          {playerControls.filter(c => c.active).map(ctrl => (
+            <div key={ctrl.id} className="content-card" style={{ padding: "14px 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: "var(--navy)" }}>{ctrl.player_email}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>
+                  {gameLabel[ctrl.game_type]} → {outcomeLabel[ctrl.outcome_control]}
+                  {ctrl.outcome_control === "house_edge" && ` (${ctrl.house_edge_percent}% edge)`}
+                </div>
+                {ctrl.note && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>Note: {ctrl.note}</div>}
+              </div>
+              <button onClick={() => removeControl(ctrl.id)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #fecaca", background: "#fee2e2", color: "#991b1b", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* SCHEDULED RESULTS TAB */}
+      {tab === "schedule" && (
+        <div>
+          <div className="panel-heading" style={{ marginBottom: 12 }}><span>SCHEDULED</span><h2>Upcoming Announcements</h2></div>
+          {scheduledResults.filter(r => r.status === "scheduled").length === 0 && <p className="empty-state content-card">No scheduled results.</p>}
+          {scheduledResults.filter(r => r.status === "scheduled").map(r => (
+            <div key={r.id} className="content-card" style={{ padding: "14px 16px", marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "var(--navy)" }}>{r.draw_name}</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>
+                    Numbers: <strong style={{ color: "var(--cyan)" }}>{(r.winning_numbers || []).join(", ")}</strong>
+                  </div>
+                  {r.forced_winner_email && <div style={{ fontSize: 12, color: "var(--muted)" }}>Forced winner: {r.forced_winner_email}</div>}
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>
+                    🕐 {new Date(r.scheduled_at).toLocaleString("en-IN")}
+                  </div>
+                </div>
+                <button onClick={async () => { await cancelScheduledResult(r.id); getScheduledResults().then(setScheduledResults); }} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #fecaca", background: "#fee2e2", color: "#991b1b", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* HOUSE SETTINGS TAB */}
+      {tab === "house" && houseSettings && (
+        <div className="content-card">
+          <div className="panel-heading"><span>HOUSE SETTINGS</span><h2>Global Game Controls</h2><p>Default house edge for all players without specific controls.</p></div>
+          {[
+            ["global_house_edge", "Global House Edge %"],
+            ["lottery_house_edge", "Lottery House Edge %"],
+            ["card_games_house_edge", "Card Games House Edge %"],
+            ["roulette_house_edge", "Roulette House Edge %"],
+            ["max_win_streak", "Max Win Streak (before forced loss)"],
+          ].map(([key, label]) => (
+            <div key={key} style={{ marginBottom: 16 }}>
+              <label style={labelStyle}>{label}: <strong style={{ color: "var(--navy)" }}>{houseSettings[key]}{key.includes("edge") ? "%" : ""}</strong></label>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input type="range" min={key === "max_win_streak" ? 1 : 0} max={key === "max_win_streak" ? 20 : 100}
+                  value={houseSettings[key] || 0}
+                  onChange={e => setHouseSettings(s => ({ ...s, [key]: Number(e.target.value) }))}
+                  style={{ flex: 1 }} />
+                <span style={{ fontWeight: 700, color: "var(--navy)", minWidth: 40 }}>{houseSettings[key]}{key.includes("edge") ? "%" : ""}</span>
+              </div>
+              {key.includes("edge") && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>Players win ~{100 - houseSettings[key]}% of the time</div>}
+            </div>
+          ))}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <input type="checkbox" id="autoResult" checked={houseSettings.auto_result_enabled} onChange={e => setHouseSettings(s => ({ ...s, auto_result_enabled: e.target.checked }))} />
+            <label htmlFor="autoResult" style={{ fontSize: 13, color: "var(--muted)", cursor: "pointer" }}>Enable automatic scheduled result announcements</label>
+          </div>
+          <button disabled={busy} onClick={saveHouseSettings} style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, var(--navy), var(--cyan))", color: "white", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
+            {busy ? "Saving…" : "💾 Save House Settings"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
