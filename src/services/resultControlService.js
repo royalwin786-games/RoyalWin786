@@ -1,4 +1,4 @@
-import { requireSupabase } from "./supabase";
+import { requireSupabase } from "../lib/supabase";
 
 // ===== HOUSE SETTINGS =====
 export async function getHouseSettings() {
