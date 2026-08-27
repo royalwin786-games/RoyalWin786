@@ -1,6 +1,5 @@
 import { getHouseSettings, updateHouseSettings, setDrawResultControl, getDrawResultControl, getScheduledResults, scheduleResult, cancelScheduledResult, getPlayerGameControls, setPlayerGameControl, removePlayerGameControl } from "./services/resultControlService";
 import CardGameScreen, { CardGamesLobby } from "./CardGames";
-import { getOrCreateReferralCode, applyReferralCode, getMyReferrals, getVipLevels, getPlayerVipInfo } from "./services/referralService";
 import { useEffect, useState } from "react";
 import { isSupabaseConfigured } from "./lib/supabase";
 import {
@@ -34,7 +33,7 @@ import {
   verifyLotteryTicket,
 } from "./services/gameService";
 
-const lotteryNumbers = Array.from({ length: 36 }, (_, index) => index + 1);
+const lotteryNumbers = Array.from({ length: 100 }, (_, index) => index + 1);
 const rouletteNumbers = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27];
 const redRouletteNumbers = new Set([32, 19, 21, 25, 34, 27]);
 const initialPlayerTickets = [
@@ -111,8 +110,6 @@ function Icon({ name, size = 24, strokeWidth = 1.8 }) {
   };
 
   const paths = {
-    share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></>,
-    cards: <><rect x="2" y="4" width="14" height="18" rx="2"/><path d="M8 4V2M16 8h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-6"/></>,
     clock: <><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></>,
     logout: <><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="m10 8 4 4-4 4M14 12H3"/></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M7 14h2M11 14h2M15 14h2M7 17h2M11 17h2M15 17h2"/></>,
@@ -415,8 +412,6 @@ function PlayerHeader({ active, onNavigate, onLogout }) {
     { label: "Wallet", icon: "wallet", screen: "player-wallet" },
     { label: "Card Games", icon: "cards", screen: "player-cards" },
     { label: "Roulette", icon: "game", screen: "player-roulette" },
-    { label: "VIP", icon: "trophy", screen: "player-vip" },
-    { label: "Refer", icon: "share", screen: "player-referral" },
   ];
   return (
     <header className="app-header player-header">
@@ -437,8 +432,6 @@ function PlayerBottomMenu({ active, onNavigate }) {
     { label: "Results", icon: "trophy", screen: "player-results" },
     { label: "Wallet", icon: "wallet", screen: "player-wallet" },
     { label: "Cards", icon: "cards", screen: "player-cards" },
-    { label: "VIP", icon: "trophy", screen: "player-vip" },
-    { label: "Refer", icon: "share", screen: "player-referral" },
   ];
   return (
     <nav className="bottom-menu player-bottom-menu" aria-label="Player navigation">
@@ -447,11 +440,17 @@ function PlayerBottomMenu({ active, onNavigate }) {
   );
 }
 
-function PlayerLayout({ active, onNavigate, onLogout, children, className = "" }) {
+function PlayerLayout({ active, onNavigate, onLogout, children, className = "", back = null }) {
   return (
     <AppFrame className={`dashboard-frame player-frame ${className}`}>
       <div className="player-screen">
         <PlayerHeader active={active} onNavigate={onNavigate} onLogout={onLogout}/>
+        {back && (
+          <button type="button" className="back-button" onClick={() => onNavigate(back)}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+            Back
+          </button>
+        )}
         <div className="player-content">{children}</div>
         <PlayerBottomMenu active={active} onNavigate={onNavigate}/>
       </div>
@@ -501,14 +500,6 @@ function PlayerDashboard({ profile, tickets, walletPoints, draw, latestResult, o
             <span className="game-badge">CARD GAMES</span><span style={{fontSize:42}}>🃏</span><h3>Card Games</h3><p>Teen Patti, Andar Bahar & Rummy — play vs AI.</p><strong>Play cards →</strong>
           </button>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>
-          <button type="button" onClick={() => onNavigate("player-vip")} style={{background:"linear-gradient(135deg,#2d2500,#4d3800)",border:"1.5px solid #FFD70055",borderRadius:16,padding:"16px",textAlign:"center",cursor:"pointer",color:"white"}}>
-            <div style={{fontSize:28,marginBottom:4}}>👑</div><div style={{fontWeight:800,fontSize:14,color:"#FFD700"}}>VIP Status</div><div style={{fontSize:12,opacity:0.7,marginTop:2}}>View your perks →</div>
-          </button>
-          <button type="button" onClick={() => onNavigate("player-referral")} style={{background:"linear-gradient(135deg,#0d3a1e,#1a5c30)",border:"1.5px solid #16a34a55",borderRadius:16,padding:"16px",textAlign:"center",cursor:"pointer",color:"white"}}>
-            <div style={{fontSize:28,marginBottom:4}}>🎁</div><div style={{fontWeight:800,fontSize:14,color:"#4ade80"}}>Refer & Earn</div><div style={{fontSize:12,opacity:0.7,marginTop:2}}>+200 coins per friend →</div>
-          </button>
-        </div>
       </section>
 
       <section className="player-section ticket-preview-section">
@@ -547,7 +538,7 @@ function LotteryGame({ onNavigate, onLogout, onSave, draw }) {
     finally { setSaving(false); }
   };
   return (
-    <PlayerLayout active="player-lottery" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
+    <PlayerLayout active="player-lottery" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame" back="player-dashboard">
       <div className="game-page-heading"><div><span>MAIN GAME</span><h1>{draw?.name || "No open draw"}</h1><p>{draw ? `Select exactly ${pickCount} numbers for the upcoming weekly lottery.` : "The next draw is being prepared by the RoyalWin786 team."}</p></div><div><span>Draw closes</span><strong>{draw ? formatDateTime(draw.closes_at) : "Coming soon"}</strong></div></div>
       <div className="lottery-game-layout">
         <section className="content-card number-picker-card">
@@ -592,7 +583,7 @@ function PlayerTickets({ tickets, onVerify, onNavigate, onLogout }) {
     }
   };
   return (
-    <PlayerLayout active="player-tickets" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
+    <PlayerLayout active="player-tickets" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame" back="player-dashboard">
       <div className="game-page-heading"><div><span>MY PLAY</span><h1>My lottery tickets</h1><p>Track saved numbers and upcoming RoyalWin786 draws.</p></div><button type="button" className="heading-action" onClick={() => onNavigate("player-lottery")}>+ New ticket</button></div>
       <section className="ticket-list">
         {tickets.length === 0 && <p className="empty-state content-card">No tickets yet. Your confirmed lottery entries will appear here.</p>}
@@ -612,7 +603,7 @@ function PlayerTickets({ tickets, onVerify, onNavigate, onLogout }) {
 function PlayerResults({ draws, tickets, onNavigate, onLogout }) {
   const published = draws.filter((draw) => draw.status === "published");
   return (
-    <PlayerLayout active="player-results" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
+    <PlayerLayout active="player-results" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame" back="player-dashboard">
       <div className="game-page-heading"><div><span>OFFICIAL RESULTS</span><h1>Lottery result history</h1><p>Published RoyalWin786 draw numbers and your settled tickets.</p></div><button type="button" className="heading-action" onClick={() => onNavigate("player-tickets")}>My tickets</button></div>
       <section className="result-list">
         {published.length === 0 && <div className="content-card empty-panel"><Icon name="trophy" size={38}/><h2>No published results yet</h2><p>The first official draw result will appear here after admin publication and automatic settlement.</p></div>}
@@ -650,7 +641,7 @@ function PlayerWallet({ profile, walletPoints, ledger, settings, onSaveSettings,
     }
   };
   return (
-    <PlayerLayout active="player-wallet" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
+    <PlayerLayout active="player-wallet" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame" back="player-dashboard">
       <div className="game-page-heading"><div><span>MY ACCOUNT</span><h1>Wallet &amp; play controls</h1><p>{profile?.email || "Player account"}</p></div><div className="wallet-balance-card"><span>Reward points</span><strong>{formatPoints(walletPoints)}</strong></div></div>
       <div className="wallet-action-buttons">
         <button type="button" className="wallet-action-btn wallet-action-btn--deposit" onClick={() => onNavigate("player-deposit")}>
@@ -703,7 +694,7 @@ function RouletteGame({ onNavigate, onLogout, onSpin }) {
     }, 1800);
   };
   return (
-    <PlayerLayout active="player-roulette" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame roulette-frame">
+    <PlayerLayout active="player-roulette" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame roulette-frame" back="player-dashboard">
       <div className="game-page-heading"><div><span>BONUS GAME</span><h1>Royal Roulette</h1><p>A quick demo-points game. Weekly lottery remains the main RoyalWin786 game.</p></div><div className="demo-balance"><Icon name="wallet" size={20}/><span>Demo balance<strong>500 points</strong></span></div></div>
       <div className="roulette-layout">
         <section className="roulette-stage">
@@ -1568,213 +1559,6 @@ function AdminResultControl({ draws, players }) {
   );
 }
 
-
-// ===== VIP BADGE =====
-function VipBadge({ level, size = "sm" }) {
-  const cfg = {
-    bronze:   { color: "#CD7F32", bg: "#2d1a00", label: "Bronze",   icon: "🥉" },
-    silver:   { color: "#C0C0C0", bg: "#1a1a1a", label: "Silver",   icon: "🥈" },
-    gold:     { color: "#FFD700", bg: "#2d2500", label: "Gold",     icon: "🥇" },
-    platinum: { color: "#E5E4E2", bg: "#1a1a2e", label: "Platinum", icon: "💎" },
-  };
-  const c = cfg[level] || cfg.bronze;
-  const pad = size === "lg" ? "6px 16px" : "3px 10px";
-  const fs = size === "lg" ? 14 : 11;
-  return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:pad, borderRadius:20, background:c.bg, border:`1px solid ${c.color}55`, color:c.color, fontWeight:700, fontSize:fs }}>
-      {c.icon} {c.label}
-    </span>
-  );
-}
-
-// ===== VIP SCREEN =====
-function VipScreen({ profile }) {
-  const [vipInfo, setVipInfo] = useState(null);
-  const [levels, setLevels] = useState([]);
-
-  useEffect(() => {
-    getPlayerVipInfo().then(setVipInfo).catch(() => {});
-    getVipLevels().then(setLevels).catch(() => {});
-  }, []);
-
-  const levelOrder = ["bronze", "silver", "gold", "platinum"];
-  const currentIdx = levelOrder.indexOf(vipInfo?.vip_level || "bronze");
-  const nextLevel = levels.find(l => l.id === levelOrder[currentIdx + 1]);
-  const current = levels.find(l => l.id === (vipInfo?.vip_level || "bronze"));
-  const spent = vipInfo?.total_spent || 0;
-  const progress = nextLevel ? Math.min((spent / nextLevel.min_spent) * 100, 100) : 100;
-
-  const vipColors = { bronze: "#CD7F32", silver: "#C0C0C0", gold: "#FFD700", platinum: "#E5E4E2" };
-  const color = vipColors[vipInfo?.vip_level || "bronze"];
-
-  return (
-    <div style={{ maxWidth:520, margin:"0 auto", padding:"0 14px 80px" }}>
-      {/* Current VIP Card */}
-      {vipInfo && (
-        <div style={{ background:`linear-gradient(135deg, #0d1b2a, #1a2744)`, border:`1.5px solid ${color}44`, borderRadius:20, padding:"24px 20px", marginBottom:16, textAlign:"center" }}>
-          <div style={{ fontSize:48, marginBottom:8 }}>{vipInfo.vip_level === "platinum" ? "💎" : vipInfo.vip_level === "gold" ? "🥇" : vipInfo.vip_level === "silver" ? "🥈" : "🥉"}</div>
-          <VipBadge level={vipInfo.vip_level} size="lg"/>
-          <div style={{ fontSize:13, color:"rgba(255,255,255,0.5)", marginTop:12 }}>Total Spent</div>
-          <div style={{ fontSize:28, fontWeight:900, color, marginTop:2 }}>{(spent).toLocaleString()} coins</div>
-          {nextLevel && (
-            <>
-              <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)", marginTop:14, marginBottom:6 }}>
-                {(nextLevel.min_spent - spent).toLocaleString()} more coins to reach {nextLevel.name}
-              </div>
-              <div style={{ background:"rgba(255,255,255,0.1)", borderRadius:20, height:8, overflow:"hidden" }}>
-                <div style={{ height:"100%", width:`${progress}%`, background:`linear-gradient(90deg, ${color}, white)`, borderRadius:20, transition:"width 0.5s" }}/>
-              </div>
-            </>
-          )}
-          {!nextLevel && <div style={{ fontSize:13, color:"#FFD700", marginTop:10 }}>🏆 Maximum VIP Level Achieved!</div>}
-        </div>
-      )}
-
-      {/* Current Perks */}
-      {current && (
-        <div style={{ background:"white", border:"1px solid #e5e7eb", borderRadius:16, padding:"16px", marginBottom:14 }}>
-          <div style={{ fontWeight:700, fontSize:14, color:"#1e3a8a", marginBottom:10 }}>Your {current.name} Perks</div>
-          {(current.perks || []).map((perk, i) => (
-            <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 0", borderBottom:i < current.perks.length-1 ? "1px solid #f3f4f6" : "none" }}>
-              <span style={{ color:"#16a34a", fontWeight:700 }}>✓</span>
-              <span style={{ fontSize:13, color:"#374151" }}>{perk}</span>
-            </div>
-          ))}
-          {current.weekly_bonus > 0 && (
-            <div style={{ background:"#fef3c7", borderRadius:10, padding:"10px 14px", marginTop:10, fontSize:13, color:"#92400e", fontWeight:600 }}>
-              🎁 Weekly Bonus: {current.weekly_bonus} coins (credited every Monday)
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* All Levels */}
-      <div style={{ fontWeight:700, fontSize:14, color:"#1e3a8a", marginBottom:10 }}>All VIP Levels</div>
-      {levels.map(lvl => {
-        const isCurrentLevel = lvl.id === (vipInfo?.vip_level || "bronze");
-        const isAchieved = levelOrder.indexOf(lvl.id) <= currentIdx;
-        const lColor = vipColors[lvl.id];
-        return (
-          <div key={lvl.id} style={{ background:isCurrentLevel?"#eff6ff":"white", border:`1.5px solid ${isCurrentLevel?"#2563eb":isAchieved?`${lColor}44`:"#e5e7eb"}`, borderRadius:14, padding:"14px 16px", marginBottom:10 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <VipBadge level={lvl.id}/>
-                <div>
-                  <div style={{ fontWeight:700, fontSize:13, color:"#1e3a8a" }}>{lvl.name}</div>
-                  <div style={{ fontSize:11, color:"#6b7280" }}>From {lvl.min_spent.toLocaleString()} coins spent</div>
-                </div>
-              </div>
-              {isCurrentLevel && <span style={{ fontSize:11, fontWeight:700, color:"#2563eb", background:"#dbeafe", padding:"3px 10px", borderRadius:20 }}>Current</span>}
-              {!isCurrentLevel && isAchieved && <span style={{ fontSize:16 }}>✅</span>}
-            </div>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:10 }}>
-              {lvl.bonus_multiplier > 1 && <span style={{ fontSize:11, background:"#dcfce7", color:"#166534", padding:"2px 8px", borderRadius:20, fontWeight:600 }}>+{Math.round((lvl.bonus_multiplier-1)*100)}% wins</span>}
-              {lvl.weekly_bonus > 0 && <span style={{ fontSize:11, background:"#fef3c7", color:"#92400e", padding:"2px 8px", borderRadius:20, fontWeight:600 }}>{lvl.weekly_bonus} weekly coins</span>}
-              <span style={{ fontSize:11, background:"#eff6ff", color:"#1d4ed8", padding:"2px 8px", borderRadius:20, fontWeight:600 }}>{lvl.withdrawal_priority} withdrawal</span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ===== REFERRAL SCREEN =====
-function ReferralScreen({ profile }) {
-  const [referralCode, setReferralCode] = useState("");
-  const [inputCode, setInputCode] = useState("");
-  const [referrals, setReferrals] = useState([]);
-  const [msg, setMsg] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    getOrCreateReferralCode().then(setReferralCode).catch(() => {});
-    getMyReferrals().then(setReferrals).catch(() => {});
-  }, []);
-
-  const showMsg = (text, type="success") => { setMsg({text, type}); setTimeout(() => setMsg(null), 3000); };
-
-  const copy = () => {
-    const url = `${window.location.origin}${window.location.pathname}?ref=${referralCode}`;
-    navigator.clipboard?.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const applyCode = async () => {
-    if (!inputCode.trim()) return showMsg("Enter a referral code!", "error");
-    setBusy(true);
-    try {
-      await applyReferralCode(inputCode.trim(), profile?.email || "");
-      showMsg("Code applied! +100 bonus coins added to your wallet! 🎉");
-      setInputCode("");
-    } catch(e) { showMsg(e.message, "error"); }
-    finally { setBusy(false); }
-  };
-
-  const totalEarned = referrals.reduce((s, r) => s + (r.bonus_awarded ? r.referrer_bonus : 0), 0);
-
-  return (
-    <div style={{ maxWidth:520, margin:"0 auto", padding:"0 14px 80px" }}>
-      {/* My Referral Code */}
-      <div style={{ background:"linear-gradient(135deg, #1e3a8a, #2563eb)", borderRadius:20, padding:"24px 20px", marginBottom:14, color:"white" }}>
-        <div style={{ fontSize:11, opacity:0.7, letterSpacing:2, marginBottom:6 }}>YOUR REFERRAL CODE</div>
-        <div style={{ fontSize:32, fontWeight:900, letterSpacing:6, marginBottom:14 }}>{referralCode || "Loading..."}</div>
-        <div style={{ fontSize:13, opacity:0.8, marginBottom:16 }}>
-          Share this code with friends. You get <strong>200 coins</strong> and they get <strong>100 coins</strong> when they join!
-        </div>
-        <button onClick={copy} style={{ width:"100%", padding:"12px", borderRadius:12, border:"2px solid rgba(255,255,255,0.3)", background:"rgba(255,255,255,0.15)", color:"white", fontWeight:800, fontSize:14, cursor:"pointer" }}>
-          {copied ? "✅ Copied!" : "📋 Copy Referral Link"}
-        </button>
-      </div>
-
-      {msg && <div style={{ padding:"10px 14px", borderRadius:10, fontSize:13, marginBottom:12, background:msg.type==="error"?"#fee2e2":"#d1fae5", color:msg.type==="error"?"#991b1b":"#065f46" }}>{msg.text}</div>}
-
-      {/* Stats */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
-        <div style={{ background:"white", border:"1px solid #e5e7eb", borderRadius:14, padding:"14px", textAlign:"center" }}>
-          <div style={{ fontSize:28, fontWeight:900, color:"#1e3a8a" }}>{referrals.length}</div>
-          <div style={{ fontSize:12, color:"#6b7280", marginTop:4 }}>Friends Referred</div>
-        </div>
-        <div style={{ background:"white", border:"1px solid #e5e7eb", borderRadius:14, padding:"14px", textAlign:"center" }}>
-          <div style={{ fontSize:28, fontWeight:900, color:"#16a34a" }}>{totalEarned}</div>
-          <div style={{ fontSize:12, color:"#6b7280", marginTop:4 }}>Coins Earned</div>
-        </div>
-      </div>
-
-      {/* Apply Code */}
-      <div style={{ background:"white", border:"1px solid #e5e7eb", borderRadius:16, padding:"16px", marginBottom:14 }}>
-        <div style={{ fontWeight:700, fontSize:14, color:"#1e3a8a", marginBottom:4 }}>Have a referral code?</div>
-        <div style={{ fontSize:12, color:"#6b7280", marginBottom:12 }}>Enter a friend's code to get 100 bonus coins!</div>
-        <div style={{ display:"flex", gap:8 }}>
-          <input value={inputCode} onChange={e=>setInputCode(e.target.value.toUpperCase())} placeholder="Enter code e.g. AB12CD34" maxLength={8}
-            style={{ flex:1, padding:"11px 14px", borderRadius:10, border:"1.5px solid #e5e7eb", fontSize:14, outline:"none", letterSpacing:2, fontWeight:700 }}/>
-          <button onClick={applyCode} disabled={busy} style={{ padding:"11px 18px", borderRadius:10, border:"none", background:"#1e3a8a", color:"white", fontWeight:800, fontSize:14, cursor:"pointer" }}>
-            {busy ? "..." : "Apply"}
-          </button>
-        </div>
-      </div>
-
-      {/* Referrals List */}
-      {referrals.length > 0 && (
-        <div style={{ background:"white", border:"1px solid #e5e7eb", borderRadius:16, padding:"16px" }}>
-          <div style={{ fontWeight:700, fontSize:14, color:"#1e3a8a", marginBottom:12 }}>Your Referrals</div>
-          {referrals.map(r => (
-            <div key={r.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:"1px solid #f3f4f6" }}>
-              <div>
-                <div style={{ fontSize:13, fontWeight:600, color:"#374151" }}>{r.referred_email}</div>
-                <div style={{ fontSize:11, color:"#9ca3af" }}>{new Date(r.created_at).toLocaleDateString("en-IN")}</div>
-              </div>
-              <span style={{ fontSize:12, fontWeight:700, color:"#16a34a" }}>+{r.referrer_bonus} coins</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function App() {
   const [screen, setScreen] = useState(() => {
     if (recoveryModeRequested && liveBackendActive) return "player-reset-password";
@@ -2007,55 +1791,43 @@ export default function App() {
   if (screen === "player-results") return <PlayerResults draws={lotteryDraws} tickets={playerTickets} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-wallet") return <PlayerWallet profile={playerProfile} walletPoints={walletPoints} ledger={walletLedger} settings={playSettings} onSaveSettings={savePlaySettings} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-deposit") return (
-    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-wallet">
       <div className="game-page-heading"><div><span>ADD MONEY</span><h1>Deposit Funds</h1><p>Add money to your RoyalWin786 wallet</p></div></div>
       <DepositScreen profile={playerProfile} walletPoints={walletPoints} onSuccess={loadPlayerPortalData}/>
     </PlayerLayout>
   );
   if (screen === "player-withdrawal") return (
-    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-wallet">
       <div className="game-page-heading"><div><span>WITHDRAW</span><h1>Request Withdrawal</h1><p>Transfer your winnings to your bank/UPI</p></div></div>
       <WithdrawalScreen profile={playerProfile} walletPoints={walletPoints} onSuccess={loadPlayerPortalData}/>
     </PlayerLayout>
   );
   if (screen === "player-transactions") return (
-    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-wallet">
       <div className="game-page-heading"><div><span>HISTORY</span><h1>Transactions</h1><p>Your deposit and withdrawal history</p></div></div>
       <TransactionsScreen/>
     </PlayerLayout>
   );
-  if (screen === "player-vip") return (
-    <PlayerLayout active="player-vip" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
-      <div className="game-page-heading"><div><span>VIP PROGRAM</span><h1>Your VIP Status</h1><p>Unlock exclusive perks as you play more</p></div></div>
-      <VipScreen profile={playerProfile}/>
-    </PlayerLayout>
-  );
-  if (screen === "player-referral") return (
-    <PlayerLayout active="player-referral" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
-      <div className="game-page-heading"><div><span>REFER & EARN</span><h1>Referral Program</h1><p>Invite friends and earn bonus coins</p></div></div>
-      <ReferralScreen profile={playerProfile}/>
-    </PlayerLayout>
-  );
   if (screen === "player-cards") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-dashboard">
       <div className="game-page-heading"><div><span>CARD GAMES</span><h1>Play & Win</h1><p>Teen Patti, Andar Bahar, Rummy</p></div></div>
       <CardGamesLobby onSelectGame={(game) => setScreen("player-card-" + game)}/>
     </PlayerLayout>
   );
   if (screen === "player-card-teen-patti") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-cards">
       <div className="game-page-heading"><div><span>TEEN PATTI</span><h1>3 Patti</h1><button type="button" onClick={() => setScreen("player-cards")} style={{fontSize:12,color:"var(--cyan)",background:"none",border:"none",cursor:"pointer",padding:0}}>← Back to Games</button></div></div>
       <CardGameScreen game="teen-patti" walletPoints={walletPoints} setWalletPoints={setWalletPoints} onExit={() => setScreen("player-cards")}/>
     </PlayerLayout>
   );
   if (screen === "player-card-andar-bahar") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-cards">
       <div className="game-page-heading"><div><span>ANDAR BAHAR</span><h1>Andar Bahar</h1><button type="button" onClick={() => setScreen("player-cards")} style={{fontSize:12,color:"var(--cyan)",background:"none",border:"none",cursor:"pointer",padding:0}}>← Back to Games</button></div></div>
       <CardGameScreen game="andar-bahar" walletPoints={walletPoints} setWalletPoints={setWalletPoints} onExit={() => setScreen("player-cards")}/>
     </PlayerLayout>
   );
   if (screen === "player-card-rummy") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-cards">
       <div className="game-page-heading"><div><span>RUMMY</span><h1>Rummy</h1><button type="button" onClick={() => setScreen("player-cards")} style={{fontSize:12,color:"var(--cyan)",background:"none",border:"none",cursor:"pointer",padding:0}}>← Back to Games</button></div></div>
       <CardGameScreen game="rummy" walletPoints={walletPoints} setWalletPoints={setWalletPoints} onExit={() => setScreen("player-cards")}/>
     </PlayerLayout>
