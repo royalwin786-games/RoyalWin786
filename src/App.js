@@ -33,7 +33,7 @@ import {
   verifyLotteryTicket,
 } from "./services/gameService";
 
-const lotteryNumbers = Array.from({ length: 100 }, (_, index) => index + 1);
+const lotteryNumbers = Array.from({ length: 100 }, (_, index) => index);
 const rouletteNumbers = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27];
 const redRouletteNumbers = new Set([32, 19, 21, 25, 34, 27]);
 const initialPlayerTickets = [
@@ -440,17 +440,11 @@ function PlayerBottomMenu({ active, onNavigate }) {
   );
 }
 
-function PlayerLayout({ active, onNavigate, onLogout, children, className = "", back = null }) {
+function PlayerLayout({ active, onNavigate, onLogout, children, className = "" }) {
   return (
     <AppFrame className={`dashboard-frame player-frame ${className}`}>
       <div className="player-screen">
         <PlayerHeader active={active} onNavigate={onNavigate} onLogout={onLogout}/>
-        {back && (
-          <button type="button" className="back-button" onClick={() => onNavigate(back)}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-            Back
-          </button>
-        )}
         <div className="player-content">{children}</div>
         <PlayerBottomMenu active={active} onNavigate={onNavigate}/>
       </div>
@@ -538,7 +532,7 @@ function LotteryGame({ onNavigate, onLogout, onSave, draw }) {
     finally { setSaving(false); }
   };
   return (
-    <PlayerLayout active="player-lottery" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame" back="player-dashboard">
+    <PlayerLayout active="player-lottery" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
       <div className="game-page-heading"><div><span>MAIN GAME</span><h1>{draw?.name || "No open draw"}</h1><p>{draw ? `Select exactly ${pickCount} numbers for the upcoming weekly lottery.` : "The next draw is being prepared by the RoyalWin786 team."}</p></div><div><span>Draw closes</span><strong>{draw ? formatDateTime(draw.closes_at) : "Coming soon"}</strong></div></div>
       <div className="lottery-game-layout">
         <section className="content-card number-picker-card">
@@ -583,7 +577,7 @@ function PlayerTickets({ tickets, onVerify, onNavigate, onLogout }) {
     }
   };
   return (
-    <PlayerLayout active="player-tickets" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame" back="player-dashboard">
+    <PlayerLayout active="player-tickets" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
       <div className="game-page-heading"><div><span>MY PLAY</span><h1>My lottery tickets</h1><p>Track saved numbers and upcoming RoyalWin786 draws.</p></div><button type="button" className="heading-action" onClick={() => onNavigate("player-lottery")}>+ New ticket</button></div>
       <section className="ticket-list">
         {tickets.length === 0 && <p className="empty-state content-card">No tickets yet. Your confirmed lottery entries will appear here.</p>}
@@ -603,7 +597,7 @@ function PlayerTickets({ tickets, onVerify, onNavigate, onLogout }) {
 function PlayerResults({ draws, tickets, onNavigate, onLogout }) {
   const published = draws.filter((draw) => draw.status === "published");
   return (
-    <PlayerLayout active="player-results" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame" back="player-dashboard">
+    <PlayerLayout active="player-results" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
       <div className="game-page-heading"><div><span>OFFICIAL RESULTS</span><h1>Lottery result history</h1><p>Published RoyalWin786 draw numbers and your settled tickets.</p></div><button type="button" className="heading-action" onClick={() => onNavigate("player-tickets")}>My tickets</button></div>
       <section className="result-list">
         {published.length === 0 && <div className="content-card empty-panel"><Icon name="trophy" size={38}/><h2>No published results yet</h2><p>The first official draw result will appear here after admin publication and automatic settlement.</p></div>}
@@ -641,7 +635,7 @@ function PlayerWallet({ profile, walletPoints, ledger, settings, onSaveSettings,
     }
   };
   return (
-    <PlayerLayout active="player-wallet" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame" back="player-dashboard">
+    <PlayerLayout active="player-wallet" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame">
       <div className="game-page-heading"><div><span>MY ACCOUNT</span><h1>Wallet &amp; play controls</h1><p>{profile?.email || "Player account"}</p></div><div className="wallet-balance-card"><span>Reward points</span><strong>{formatPoints(walletPoints)}</strong></div></div>
       <div className="wallet-action-buttons">
         <button type="button" className="wallet-action-btn wallet-action-btn--deposit" onClick={() => onNavigate("player-deposit")}>
@@ -694,7 +688,7 @@ function RouletteGame({ onNavigate, onLogout, onSpin }) {
     }, 1800);
   };
   return (
-    <PlayerLayout active="player-roulette" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame roulette-frame" back="player-dashboard">
+    <PlayerLayout active="player-roulette" onNavigate={onNavigate} onLogout={onLogout} className="player-game-frame roulette-frame">
       <div className="game-page-heading"><div><span>BONUS GAME</span><h1>Royal Roulette</h1><p>A quick demo-points game. Weekly lottery remains the main RoyalWin786 game.</p></div><div className="demo-balance"><Icon name="wallet" size={20}/><span>Demo balance<strong>500 points</strong></span></div></div>
       <div className="roulette-layout">
         <section className="roulette-stage">
@@ -1791,43 +1785,43 @@ export default function App() {
   if (screen === "player-results") return <PlayerResults draws={lotteryDraws} tickets={playerTickets} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-wallet") return <PlayerWallet profile={playerProfile} walletPoints={walletPoints} ledger={walletLedger} settings={playSettings} onSaveSettings={savePlaySettings} onNavigate={setScreen} onLogout={logout}/>;
   if (screen === "player-deposit") return (
-    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-wallet">
+    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <div className="game-page-heading"><div><span>ADD MONEY</span><h1>Deposit Funds</h1><p>Add money to your RoyalWin786 wallet</p></div></div>
       <DepositScreen profile={playerProfile} walletPoints={walletPoints} onSuccess={loadPlayerPortalData}/>
     </PlayerLayout>
   );
   if (screen === "player-withdrawal") return (
-    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-wallet">
+    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <div className="game-page-heading"><div><span>WITHDRAW</span><h1>Request Withdrawal</h1><p>Transfer your winnings to your bank/UPI</p></div></div>
       <WithdrawalScreen profile={playerProfile} walletPoints={walletPoints} onSuccess={loadPlayerPortalData}/>
     </PlayerLayout>
   );
   if (screen === "player-transactions") return (
-    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-wallet">
+    <PlayerLayout active="player-wallet" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <div className="game-page-heading"><div><span>HISTORY</span><h1>Transactions</h1><p>Your deposit and withdrawal history</p></div></div>
       <TransactionsScreen/>
     </PlayerLayout>
   );
   if (screen === "player-cards") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-dashboard">
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <div className="game-page-heading"><div><span>CARD GAMES</span><h1>Play & Win</h1><p>Teen Patti, Andar Bahar, Rummy</p></div></div>
       <CardGamesLobby onSelectGame={(game) => setScreen("player-card-" + game)}/>
     </PlayerLayout>
   );
   if (screen === "player-card-teen-patti") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-cards">
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <div className="game-page-heading"><div><span>TEEN PATTI</span><h1>3 Patti</h1><button type="button" onClick={() => setScreen("player-cards")} style={{fontSize:12,color:"var(--cyan)",background:"none",border:"none",cursor:"pointer",padding:0}}>← Back to Games</button></div></div>
       <CardGameScreen game="teen-patti" walletPoints={walletPoints} setWalletPoints={setWalletPoints} onExit={() => setScreen("player-cards")}/>
     </PlayerLayout>
   );
   if (screen === "player-card-andar-bahar") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-cards">
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <div className="game-page-heading"><div><span>ANDAR BAHAR</span><h1>Andar Bahar</h1><button type="button" onClick={() => setScreen("player-cards")} style={{fontSize:12,color:"var(--cyan)",background:"none",border:"none",cursor:"pointer",padding:0}}>← Back to Games</button></div></div>
       <CardGameScreen game="andar-bahar" walletPoints={walletPoints} setWalletPoints={setWalletPoints} onExit={() => setScreen("player-cards")}/>
     </PlayerLayout>
   );
   if (screen === "player-card-rummy") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-cards">
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <div className="game-page-heading"><div><span>RUMMY</span><h1>Rummy</h1><button type="button" onClick={() => setScreen("player-cards")} style={{fontSize:12,color:"var(--cyan)",background:"none",border:"none",cursor:"pointer",padding:0}}>← Back to Games</button></div></div>
       <CardGameScreen game="rummy" walletPoints={walletPoints} setWalletPoints={setWalletPoints} onExit={() => setScreen("player-cards")}/>
     </PlayerLayout>
