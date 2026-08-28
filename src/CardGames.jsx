@@ -24,8 +24,25 @@ function shuffle(deck) {
 function isRed(suit) { return suit === "♥" || suit === "♦"; }
 
 // ===== TEEN PATTI HAND RANKINGS =====
+function getBestThreeCards(cards) {
+  // Find best 3-card combination from hand
+  let best = { rank: 0, name: "High Card", score: 0 };
+  for (let i = 0; i < cards.length - 2; i++) {
+    for (let j = i + 1; j < cards.length - 1; j++) {
+      for (let k = j + 1; k < cards.length; k++) {
+        const combo = [cards[i], cards[j], cards[k]];
+        const r = getTeenPattiRank(combo);
+        if (r.rank > best.rank || (r.rank === best.rank && r.score > best.score)) {
+          best = { ...r, cards: combo };
+        }
+      }
+    }
+  }
+  return best;
+}
+
 function getTeenPattiRank(cards) {
-  if (cards.length !== 3) return { rank: 0, name: "—" };
+  if (cards.length < 3) return { rank: 0, name: "—" };
   const vals = cards.map(c => c.val).sort((a, b) => b - a);
   const suits = cards.map(c => c.suit);
   const ranks = cards.map(c => c.rank);
@@ -89,8 +106,8 @@ function TeenPatti({ walletPoints, setWalletPoints, onExit }) {
     if (walletPoints < ante * 2) return setMsg("Not enough coins!");
     const deck = shuffle(createDeck());
     deckRef.current = deck;
-    const pCards = [deck[0], deck[1], deck[2]];
-    const aCards = [deck[3], deck[4], deck[5]];
+    const pCards = deck.slice(0, 13);
+    const aCards = deck.slice(13, 26);
     setPlayerCards(pCards); setAiCards(aCards);
     setPlayerSeen(false); setPlayerFolded(false); setAiFolded(false);
     setResult(null); setMsg("");
@@ -165,8 +182,8 @@ function TeenPatti({ walletPoints, setWalletPoints, onExit }) {
   const showdown = useCallback((forceAiWin = false) => {
     setPhase("showdown");
     setTimeout(() => {
-      const playerHand = getTeenPattiRank(playerCards);
-      const aiHand = getTeenPattiRank(aiCards);
+      const playerHand = getBestThreeCards(playerCards);
+      const aiHand = getBestThreeCards(aiCards);
       let winner, reason;
       if (!forceAiWin && (playerHand.rank > aiHand.rank || (playerHand.rank === aiHand.rank && playerHand.score >= aiHand.score))) {
         winner = "player";
@@ -181,7 +198,7 @@ function TeenPatti({ walletPoints, setWalletPoints, onExit }) {
     }, 1500);
   }, [playerCards, aiCards, pot]);
 
-  const betAmount = playerSeen ? currentBet * 2 : currentBet;
+  const betAmount = playerSeen ? currentBet * 2 : Math.ceil(currentBet / 2);
 
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 14px 80px" }}>
@@ -207,10 +224,10 @@ function TeenPatti({ walletPoints, setWalletPoints, onExit }) {
         <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginBottom: 8 }}>
           {aiThinking ? "🤔 AI is thinking..." : aiFolded ? "AI Folded" : "AI Player"}
         </div>
-        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: 5, overflowX: "auto", paddingBottom: 6, justifyContent: "center", flexWrap: "wrap" }}>
           {phase === "showdown" || phase === "result"
-            ? aiCards.map((c, i) => <Card key={i} card={c} />)
-            : [0, 1, 2].map(i => <Card key={i} faceDown />)}
+            ? aiCards.map((c, i) => <Card key={i} card={c} small/>)
+            : Array.from({length: 13}).map((_, i) => <Card key={i} faceDown small/>)}
         </div>
         {result && <div style={{ marginTop: 8, fontSize: 13, color: "#fbbf24", fontWeight: 600 }}>{result.aiHand}</div>}
       </div>
@@ -220,9 +237,9 @@ function TeenPatti({ walletPoints, setWalletPoints, onExit }) {
       {/* Player Cards */}
       <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 16, padding: "16px", marginBottom: 12, textAlign: "center" }}>
         <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 8 }}>Your Cards {playerSeen ? "" : "(Blind)"}</div>
-        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-          {phase === "bet" ? [0, 1, 2].map(i => <Card key={i} faceDown />) :
-            playerCards.map((c, i) => <Card key={i} card={c} faceDown={!playerSeen} animate />)}
+        <div style={{ display: "flex", gap: 5, overflowX: "auto", paddingBottom: 6, justifyContent: "center", flexWrap: "wrap" }}>
+          {phase === "bet" ? Array.from({length: 13}).map((_, i) => <Card key={i} faceDown small />) :
+            playerCards.map((c, i) => <Card key={i} card={c} small faceDown={!playerSeen} animate />)}
         </div>
         {result && <div style={{ marginTop: 8, fontSize: 13, color: "#1e3a8a", fontWeight: 600 }}>{result.playerHand}</div>}
       </div>
