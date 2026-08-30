@@ -43,6 +43,9 @@ function assertActivePlayer(profile) {
   }
 }
 
+// Welcome bonus on signup
+const SIGNUP_BONUS_COINS = 1000;
+
 export async function registerPlayer({ name, email, phone, age, password, redirectTo }) {
   const client = requireSupabase();
   const normalizedName = String(name || "").trim().replace(/\s+/g, " ");

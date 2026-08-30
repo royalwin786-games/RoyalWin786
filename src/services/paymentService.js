@@ -15,7 +15,7 @@ export async function updatePaymentSettings(settings) {
 }
 
 // ===== DEPOSITS =====
-export async function submitDeposit({ method, amount, coinsToAdd, utrNumber, upiId, notes, playerName, playerEmail }) {
+export async function submitDeposit({ method, amount, coinsToAdd, utrNumber, upiId, notes, receiptUrl, playerName, playerEmail }) {
   const client = requireSupabase();
   const { data: { user } } = await client.auth.getUser();
   const { error } = await client.from("deposits").insert({
@@ -28,6 +28,7 @@ export async function submitDeposit({ method, amount, coinsToAdd, utrNumber, upi
     utr_number: utrNumber,
     upi_id: upiId,
     notes,
+    receipt_url: receiptUrl || null,
     status: "pending",
   });
   if (error) throw error;
