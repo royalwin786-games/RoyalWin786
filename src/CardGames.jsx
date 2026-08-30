@@ -1,4 +1,3 @@
-import { createRoom, joinRoom, startGame, makeMove, getRoomData, subscribeToRoom, leaveRoom, getOpenRooms } from "./services/multiplayerService";
 import { resolveOutcome, getHouseSettings } from "./services/resultControlService";
 import { useState, useEffect, useCallback, useRef } from "react";
 
@@ -138,7 +137,8 @@ function TeenPatti({ walletPoints, setWalletPoints, onExit }) {
       if (forcedOutcome === "win") {
         // Force player to win - AI folds
         setAiFolded(true);
-        setWalletPoints(w => w + pot + playerBet);
+        const foldPrize = Math.floor((pot + playerBet) * 0.60);
+        setWalletPoints(w => w + foldPrize);
         setResult({ winner: "player", reason: "AI folded!" });
         setPhase("result");
         return;
@@ -152,7 +152,8 @@ function TeenPatti({ walletPoints, setWalletPoints, onExit }) {
       // Normal AI behavior
       if (aiHand.rank <= 1 && rand < 0.35) {
         setAiFolded(true);
-        setWalletPoints(w => w + pot + playerBet);
+        const foldPrize = Math.floor((pot + playerBet) * 0.60);
+        setWalletPoints(w => w + foldPrize);
         setResult({ winner: "player", reason: "AI folded!" });
         setPhase("result");
         return;
@@ -172,7 +173,8 @@ function TeenPatti({ walletPoints, setWalletPoints, onExit }) {
       if (!forceAiWin && (playerHand.rank > aiHand.rank || (playerHand.rank === aiHand.rank && playerHand.score >= aiHand.score))) {
         winner = "player";
         reason = `Your ${playerHand.name} beats AI's ${aiHand.name}!`;
-        setWalletPoints(w => w + pot);
+        const playerPrize = Math.floor(pot * 0.60); // 60% RTP, platform keeps 40%
+        setWalletPoints(w => w + playerPrize);
       } else {
         winner = "ai";
         reason = `AI's ${aiHand.name} beats your ${playerHand.name}`;
@@ -233,7 +235,7 @@ function TeenPatti({ walletPoints, setWalletPoints, onExit }) {
         <div style={{ background: result.winner === "player" ? "#d1fae5" : "#fee2e2", border: `1px solid ${result.winner === "player" ? "#6ee7b7" : "#fca5a5"}`, borderRadius: 14, padding: "16px", marginBottom: 12, textAlign: "center" }}>
           <div style={{ fontSize: 24, marginBottom: 6 }}>{result.winner === "player" ? "🏆" : "😔"}</div>
           <div style={{ fontWeight: 800, fontSize: 18, color: result.winner === "player" ? "#065f46" : "#991b1b" }}>
-            {result.winner === "player" ? `You Won ${pot} Coins!` : "You Lost!"}
+            {result.winner === "player" ? `You Won ${Math.floor(pot * 0.60)} Coins!` : "You Lost!"}
           </div>
           <div style={{ fontSize: 13, color: "#374151", marginTop: 4 }}>{result.reason}</div>
         </div>
@@ -560,8 +562,9 @@ function Rummy({ walletPoints, setWalletPoints, onExit }) {
     const playerScore = checkRummy(ph);
     const aiScore = checkRummy(ah);
     if (playerScore >= aiScore) {
-      setWalletPoints(w => w + bet * 2);
-      setResult({ winner: "player", msg: `You win! Your score: ${playerScore} vs AI: ${aiScore}. +${bet * 2} coins!` });
+      const rummyPrize = Math.floor(bet * 1.2); // 60% RTP
+      setWalletPoints(w => w + bet + rummyPrize);
+      setResult({ winner: "player", msg: `You win! Your score: ${playerScore} vs AI: ${aiScore}. +${rummyPrize} coins profit!` });
     } else {
       setResult({ winner: "ai", msg: `AI wins! AI score: ${aiScore} vs yours: ${playerScore}.` });
     }
@@ -668,334 +671,9 @@ function Rummy({ walletPoints, setWalletPoints, onExit }) {
   );
 }
 
-
-// ===== MULTIPLAYER LOBBY =====
-export function MultiplayerLobby({ profile, walletPoints, onJoinGame, onBack }) {
-  const [tab, setTab] = useState("browse");
-  const [rooms, setRooms] = useState([]);
-  const [joinCode, setJoinCode] = useState("");
-  const [ante, setAnte] = useState(10);
-  const [maxPlayers, setMaxPlayers] = useState(4);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
-
-  const loadRooms = async () => {
-    try { setRooms(await getOpenRooms()); } catch {}
-  };
-
-  useEffect(() => { loadRooms(); const id = setInterval(loadRooms, 5000); return () => clearInterval(id); }, []);
-
-  const showMsg = (text, type="error") => { setMsg({text,type}); setTimeout(()=>setMsg(null), 3000); };
-
-  const create = async () => {
-    setBusy(true);
-    try {
-      const room = await createRoom({ gameType: 'teen-patti', ante, maxPlayers });
-      onJoinGame(room.id, room.code);
-    } catch(e) { showMsg(e.message); }
-    finally { setBusy(false); }
-  };
-
-  const join = async (code) => {
-    if (!code?.trim()) return showMsg("Enter room code!");
-    setBusy(true);
-    try {
-      const { room } = await joinRoom(code.trim().toUpperCase());
-      onJoinGame(room.id, room.code);
-    } catch(e) { showMsg(e.message); }
-    finally { setBusy(false); }
-  };
-
-  const C = { navy:"#1e3a8a", gold:"#f59e0b", green:"#16a34a", border:"#e5e7eb", muted:"#6b7280" };
-
-  return (
-    <div style={{maxWidth:480,margin:"0 auto",padding:"0 14px 80px"}}>
-      <div style={{textAlign:"center",padding:"16px 0 12px"}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:2}}>MULTIPLAYER</div>
-        <div style={{fontSize:24,fontWeight:800,color:C.navy}}>Teen Patti Live</div>
-        <div style={{fontSize:13,color:C.muted,marginTop:2}}>Play vs real players • 2-6 players</div>
-      </div>
-
-      {msg && <div style={{padding:"10px 14px",borderRadius:10,fontSize:13,marginBottom:12,background:msg.type==="error"?"#fee2e2":"#d1fae5",color:msg.type==="error"?"#991b1b":"#065f46"}}>{msg.text}</div>}
-
-      {/* Tabs */}
-      <div style={{display:"flex",gap:6,marginBottom:14}}>
-        {[["browse","🔍 Browse Rooms"],["create","➕ Create Room"],["join","🔗 Join by Code"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"9px 6px",borderRadius:10,border:`1.5px solid ${tab===id?C.navy:C.border}`,background:tab===id?"#eff6ff":"white",color:tab===id?C.navy:C.muted,fontWeight:tab===id?800:600,fontSize:12,cursor:"pointer"}}>{label}</button>
-        ))}
-      </div>
-
-      {/* Browse Rooms */}
-      {tab==="browse" && (
-        <div>
-          {rooms.length===0 ? (
-            <div style={{background:"white",border:`1px solid ${C.border}`,borderRadius:16,padding:"30px",textAlign:"center",color:C.muted}}>
-              <div style={{fontSize:40,marginBottom:10}}>🎴</div>
-              <div style={{fontWeight:700,fontSize:15,color:C.navy,marginBottom:6}}>No open rooms</div>
-              <div style={{fontSize:13}}>Create a room and invite friends!</div>
-            </div>
-          ) : rooms.map(room => (
-            <div key={room.id} style={{background:"white",border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>
-                <div style={{fontWeight:700,fontSize:14,color:C.navy}}>Room {room.code}</div>
-                <div style={{fontSize:12,color:C.muted,marginTop:3}}>Host: {room.host_name} • Ante: {room.ante} coins</div>
-                <div style={{fontSize:12,color:C.green,marginTop:2}}>{room.room_players?.[0]?.count || 0}/{room.max_players} players</div>
-              </div>
-              <button onClick={()=>join(room.code)} disabled={busy} style={{padding:"9px 16px",borderRadius:10,border:"none",background:C.navy,color:"white",fontWeight:700,fontSize:13,cursor:"pointer"}}>Join</button>
-            </div>
-          ))}
-          <button onClick={loadRooms} style={{width:"100%",padding:"11px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"white",color:C.muted,fontWeight:600,fontSize:13,cursor:"pointer",marginTop:6}}>🔄 Refresh</button>
-        </div>
-      )}
-
-      {/* Create Room */}
-      {tab==="create" && (
-        <div style={{background:"white",border:`1px solid ${C.border}`,borderRadius:16,padding:"20px"}}>
-          <div style={{fontWeight:700,fontSize:15,color:C.navy,marginBottom:16}}>Create New Room</div>
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.muted,marginBottom:6}}>Ante Amount (coins)</div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {[5,10,25,50,100].map(a=>(
-                <button key={a} onClick={()=>setAnte(a)} style={{padding:"8px 14px",borderRadius:10,border:`1.5px solid ${ante===a?C.navy:C.border}`,background:ante===a?"#eff6ff":"white",color:ante===a?C.navy:C.muted,fontWeight:700,cursor:"pointer"}}>{a}</button>
-              ))}
-            </div>
-          </div>
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.muted,marginBottom:6}}>Max Players</div>
-            <div style={{display:"flex",gap:8}}>
-              {[2,3,4,5,6].map(n=>(
-                <button key={n} onClick={()=>setMaxPlayers(n)} style={{flex:1,padding:"8px 0",borderRadius:10,border:`1.5px solid ${maxPlayers===n?C.navy:C.border}`,background:maxPlayers===n?"#eff6ff":"white",color:maxPlayers===n?C.navy:C.muted,fontWeight:700,cursor:"pointer"}}>{n}</button>
-              ))}
-            </div>
-          </div>
-          <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"#166534"}}>
-            Your balance: <strong>{walletPoints} coins</strong> • Min needed: <strong>{ante} coins</strong>
-          </div>
-          <button onClick={create} disabled={busy||walletPoints<ante} style={{width:"100%",padding:"13px",borderRadius:12,border:"none",background:C.navy,color:"white",fontWeight:800,fontSize:15,cursor:"pointer",opacity:busy||walletPoints<ante?0.5:1}}>
-            {busy?"Creating…":"🎴 Create Room"}
-          </button>
-        </div>
-      )}
-
-      {/* Join by Code */}
-      {tab==="join" && (
-        <div style={{background:"white",border:`1px solid ${C.border}`,borderRadius:16,padding:"20px"}}>
-          <div style={{fontWeight:700,fontSize:15,color:C.navy,marginBottom:16}}>Join with Room Code</div>
-          <input
-            value={joinCode}
-            onChange={e=>setJoinCode(e.target.value.toUpperCase())}
-            placeholder="Enter 6-digit code e.g. AB3X7K"
-            maxLength={6}
-            style={{width:"100%",padding:"13px 16px",borderRadius:12,border:`1.5px solid ${C.border}`,fontSize:16,fontWeight:700,letterSpacing:4,textAlign:"center",outline:"none",boxSizing:"border-box",marginBottom:14}}
-          />
-          <button onClick={()=>join(joinCode)} disabled={busy||joinCode.length<6} style={{width:"100%",padding:"13px",borderRadius:12,border:"none",background:C.navy,color:"white",fontWeight:800,fontSize:15,cursor:"pointer",opacity:joinCode.length<6?0.5:1}}>
-            {busy?"Joining…":"🚪 Join Room"}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ===== MULTIPLAYER GAME ROOM =====
-export function MultiplayerGame({ roomId, roomCode, profile, onLeave }) {
-  const [roomData, setRoomData] = useState({ room:null, players:[], moves:[] });
-  const [myCards, setMyCards] = useState([]);
-  const [isSeen, setIsSeen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const channelRef = useRef(null);
-
-  const C = { navy:"#1e3a8a", gold:"#f59e0b", green:"#16a34a", red:"#dc2626", border:"#e5e7eb", muted:"#6b7280" };
-
-  const load = useCallback(async () => {
-    try {
-      const data = await getRoomData(roomId);
-      setRoomData(data);
-      const me = data.players?.find(p => p.player_id === profile?.id);
-      if (me?.cards) {
-        try { setMyCards(typeof me.cards === 'string' ? JSON.parse(me.cards) : me.cards); } catch {}
-      }
-    } catch {}
-  }, [roomId, profile?.id]);
-
-  useEffect(() => {
-    load();
-    subscribeToRoom(roomId, load).then(ch => { channelRef.current = ch; });
-    const id = setInterval(load, 3000);
-    return () => {
-      clearInterval(id);
-      if (channelRef.current) channelRef.current.unsubscribe();
-    };
-  }, [roomId, load]);
-
-  const room = roomData.room;
-  const players = roomData.players;
-  const moves = roomData.moves;
-  const myPlayer = players.find(p => p.player_id === profile?.id);
-  const isHost = room?.host_id === profile?.id;
-  const isMyTurn = room?.current_turn === profile?.id;
-  const activePlayers = players.filter(p => p.status === 'active');
-
-  const doMove = async (moveType, amount=0) => {
-    setBusy(true);
-    try {
-      await makeMove(roomId, moveType, amount);
-      if (moveType === 'see') setIsSeen(true);
-      await load();
-    } catch(e) { setMsg(e.message); setTimeout(()=>setMsg(null),2500); }
-    finally { setBusy(false); }
-  };
-
-  const doStart = async () => {
-    setBusy(true);
-    try { await startGame(roomId); await load(); }
-    catch(e) { setMsg(e.message); setTimeout(()=>setMsg(null),2500); }
-    finally { setBusy(false); }
-  };
-
-  const doLeave = async () => {
-    await leaveRoom(roomId);
-    onLeave();
-  };
-
-  const betAmount = isSeen ? (room?.ante||10)*2 : (room?.ante||10);
-
-  return (
-    <div style={{maxWidth:480,margin:"0 auto",padding:"0 14px 80px"}}>
-      {/* Room Header */}
-      <div style={{background:C.navy,borderRadius:16,padding:"14px 16px",marginBottom:12,color:"white",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div>
-          <div style={{fontSize:11,opacity:0.6,letterSpacing:2}}>ROOM CODE</div>
-          <div style={{fontSize:22,fontWeight:900,letterSpacing:4}}>{roomCode}</div>
-        </div>
-        <div style={{textAlign:"right"}}>
-          <div style={{fontSize:11,opacity:0.6}}>POT</div>
-          <div style={{fontSize:20,fontWeight:900,color:"#fbbf24"}}>{room?.pot || 0}</div>
-        </div>
-      </div>
-
-      {msg && <div style={{background:"#fee2e2",borderRadius:10,padding:"8px 14px",fontSize:13,color:C.red,marginBottom:10}}>{msg}</div>}
-
-      {/* Players */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:12}}>
-        {players.map(p => {
-          const isMe = p.player_id === profile?.id;
-          const isTurn = room?.current_turn === p.player_id;
-          return (
-            <div key={p.id} style={{background:isTurn?"#dbeafe":isMe?"#f0fdf4":"white",border:`1.5px solid ${isTurn?C.navy:isMe?"#bbf7d0":C.border}`,borderRadius:12,padding:"10px 12px",opacity:p.status==="folded"?0.5:1}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div style={{fontWeight:700,fontSize:13,color:C.navy}}>{p.player_name}{isMe?" (You)":""}</div>
-                {isTurn && <span style={{fontSize:10,background:C.navy,color:"white",padding:"2px 7px",borderRadius:10,fontWeight:700}}>TURN</span>}
-              </div>
-              <div style={{fontSize:11,color:C.muted,marginTop:2}}>
-                {p.status==="folded"?"❌ Folded":p.status==="left"?"🚪 Left":p.is_seen?"👁 Seen":"🙈 Blind"}
-              </div>
-              <div style={{fontSize:11,color:C.green,marginTop:2}}>Bet: {p.current_bet} coins</div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* My Cards */}
-      {myCards.length > 0 && room?.status === 'playing' && (
-        <div style={{background:"white",border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:12}}>
-          <div style={{fontSize:11,color:C.muted,marginBottom:8,textAlign:"center"}}>YOUR CARDS {isSeen?"(Seen)":"(Blind - tap See Cards to reveal)"}</div>
-          <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"center"}}>
-            {myCards.map((c,i) => <Card key={i} card={c} small faceDown={!isSeen}/>)}
-          </div>
-        </div>
-      )}
-
-      {/* Game Log */}
-      {moves.length > 0 && (
-        <div style={{background:"#f9fafb",border:`1px solid ${C.border}`,borderRadius:12,padding:"12px",marginBottom:12,maxHeight:120,overflowY:"auto"}}>
-          {moves.slice(0,8).map((m,i) => (
-            <div key={i} style={{fontSize:12,color:C.muted,padding:"3px 0",borderBottom:i<moves.length-1?"1px solid #f3f4f6":"none"}}>
-              <strong style={{color:C.navy}}>{m.player_name}</strong> {m.move_type==="bet"?`bet ${m.amount} coins`:m.move_type==="fold"?"folded":m.move_type==="see"?"saw cards":m.move_type==="join"?"joined":m.move_type==="start"?"started the game":m.move_type==="show"?"showed cards":"left"}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Result */}
-      {room?.status === 'finished' && (
-        <div style={{background:"#d1fae5",border:"1px solid #6ee7b7",borderRadius:14,padding:"20px",textAlign:"center",marginBottom:12}}>
-          <div style={{fontSize:32,marginBottom:8}}>🏆</div>
-          <div style={{fontWeight:800,fontSize:18,color:"#065f46"}}>{room.game_state?.winner} Wins!</div>
-          <div style={{fontSize:14,color:C.green,marginTop:4}}>Pot: {room.game_state?.pot} coins</div>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {/* Waiting room */}
-        {room?.status === 'waiting' && (
-          <div style={{background:"white",border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",textAlign:"center"}}>
-            <div style={{fontSize:13,color:C.muted,marginBottom:12}}>
-              Waiting for players... ({activePlayers.length}/{room?.max_players})
-            </div>
-            <div style={{display:"flex",gap:4,justifyContent:"center",marginBottom:14}}>
-              {Array.from({length:room?.max_players||4}).map((_,i) => (
-                <div key={i} style={{width:32,height:32,borderRadius:"50%",background:i<activePlayers.length?"#1e3a8a":"#e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:14}}>
-                  {i<activePlayers.length?"👤":""}
-                </div>
-              ))}
-            </div>
-            {isHost && activePlayers.length >= 2 && (
-              <button onClick={doStart} disabled={busy} style={{width:"100%",padding:"13px",borderRadius:12,border:"none",background:C.green,color:"white",fontWeight:800,fontSize:15,cursor:"pointer"}}>
-                {busy?"Starting…":"🎴 Start Game"}
-              </button>
-            )}
-            {isHost && activePlayers.length < 2 && (
-              <div style={{fontSize:13,color:C.muted}}>Need at least 2 players to start</div>
-            )}
-            {!isHost && <div style={{fontSize:13,color:C.muted}}>Waiting for host to start...</div>}
-          </div>
-        )}
-
-        {/* Playing */}
-        {room?.status === 'playing' && myPlayer?.status === 'active' && (
-          <>
-            {!isSeen && (
-              <button onClick={()=>doMove('see')} disabled={busy} style={{width:"100%",padding:"12px",borderRadius:12,border:`2px solid #7c3aed`,background:"#ede9fe",color:"#4c1d95",fontWeight:800,fontSize:14,cursor:"pointer"}}>
-                👁 See Cards
-              </button>
-            )}
-            {isMyTurn ? (
-              <div style={{display:"flex",gap:8}}>
-                <button onClick={()=>doMove('bet',betAmount)} disabled={busy} style={{flex:2,padding:"13px",borderRadius:12,border:"none",background:C.green,color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>
-                  {isSeen?`Chaal (${betAmount})`:`Blind (${betAmount})`}
-                </button>
-                <button onClick={()=>doMove('fold')} disabled={busy} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:C.red,color:"white",fontWeight:800,fontSize:14,cursor:"pointer"}}>Pack</button>
-              </div>
-            ) : (
-              <div style={{textAlign:"center",padding:"12px",background:"#f9fafb",borderRadius:12,color:C.muted,fontSize:14}}>
-                Waiting for {players.find(p=>p.player_id===room?.current_turn)?.player_name || "other player"}...
-              </div>
-            )}
-            {isSeen && isMyTurn && (
-              <button onClick={()=>doMove('show')} disabled={busy} style={{width:"100%",padding:"12px",borderRadius:12,border:`2px solid ${C.navy}`,background:"#eff6ff",color:C.navy,fontWeight:800,fontSize:14,cursor:"pointer"}}>
-                🃏 Show Cards
-              </button>
-            )}
-          </>
-        )}
-        {myPlayer?.status === 'folded' && <div style={{textAlign:"center",padding:"12px",background:"#fee2e2",borderRadius:12,color:C.red,fontSize:14,fontWeight:600}}>❌ You folded this round</div>}
-      </div>
-
-      {/* Leave Button */}
-      <button onClick={doLeave} style={{width:"100%",padding:"11px",borderRadius:12,border:`1.5px solid ${C.border}`,background:"white",color:C.muted,fontWeight:700,fontSize:13,cursor:"pointer",marginTop:12}}>
-        🚪 Leave Room
-      </button>
-    </div>
-  );
-}
-
 // ===== CARD GAMES LOBBY =====
 export function CardGamesLobby({ onSelectGame }) {
   const games = [
-    { id: "multiplayer", name: "Teen Patti Live", icon: "🎮", desc: "Play vs real players online! Create or join a room.", color: "#1e3a8a", bg: "#eff6ff" },
     { id: "teen-patti", name: "Teen Patti", icon: "🃏", desc: "Classic 3-card Indian poker. Blind or Seen — can you beat the AI?", color: "#1e3a8a", bg: "#eff6ff" },
     { id: "andar-bahar", name: "Andar Bahar", icon: "🎴", desc: "Simple & fast! Pick Andar or Bahar before the joker appears.", color: "#92400e", bg: "#fef3c7" },
     { id: "rummy", name: "Rummy", icon: "🎰", desc: "Form sets and sequences. Declare Rummy to win the pot!", color: "#065f46", bg: "#d1fae5" },
