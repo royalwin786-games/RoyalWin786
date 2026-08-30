@@ -875,6 +875,8 @@ function DepositScreen({ profile, walletPoints, onSuccess }) {
   const [amount, setAmount] = useState("");
   const [utrNumber, setUtrNumber] = useState("");
   const [notes, setNotes] = useState("");
+  const [screenshot, setScreenshot] = useState(null);
+  const [screenshotPreview, setScreenshotPreview] = useState(null);
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -885,19 +887,49 @@ function DepositScreen({ profile, walletPoints, onSuccess }) {
 
   const coinsToAdd = settings ? Math.floor(Number(amount) * settings.coins_per_rupee) : 0;
 
+  // Dynamic QR code URL using QR Server API
+  const getQrUrl = (amt) => {
+    if (!settings?.upi_id || !amt) return null;
+    const upiString = `upi://pay?pa=${settings.upi_id}&pn=RoyalWin786&am=${amt}&cu=INR&tn=RoyalWin786Deposit`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiString)}`;
+  };
+
+  const handleScreenshot = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) return setMsg({ type: "error", text: "Screenshot must be under 5MB" });
+    setScreenshot(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setScreenshotPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
   const submit = async () => {
     if (!amount || Number(amount) < (settings?.min_deposit || 100)) return setMsg({ type: "error", text: `Minimum deposit ₹${settings?.min_deposit || 100}` });
-    if (method === "upi" && !utrNumber.trim()) return setMsg({ type: "error", text: "Please enter UTR number" });
+    if (method === "upi" && !utrNumber.trim()) return setMsg({ type: "error", text: "Please enter UTR/reference number" });
     setBusy(true); setMsg(null);
     try {
+      let receiptUrl = null;
+      // Upload screenshot if provided
+      if (screenshot) {
+        const { requireSupabase } = await import("./lib/supabase");
+        const client = requireSupabase();
+        const fileName = `receipts/${profile?.id || "user"}_${Date.now()}.${screenshot.name.split(".").pop()}`;
+        const { data: uploadData, error: uploadError } = await client.storage.from("receipts").upload(fileName, screenshot);
+        if (!uploadError && uploadData) {
+          const { data: urlData } = client.storage.from("receipts").getPublicUrl(fileName);
+          receiptUrl = urlData?.publicUrl;
+        }
+      }
       await submitDeposit({
         method, amount: Number(amount), coinsToAdd,
         utrNumber: utrNumber.trim(), notes,
+        receiptUrl,
         playerName: profile?.display_name || "",
         playerEmail: profile?.email || "",
       });
       setMsg({ type: "success", text: "Deposit request submitted! Admin will verify and add coins within 30 mins." });
-      setStep(3);
+      setStep(4);
       if (onSuccess) onSuccess();
     } catch (err) {
       setMsg({ type: "error", text: err.message || "Failed to submit. Try again." });
@@ -911,12 +943,12 @@ function DepositScreen({ profile, walletPoints, onSuccess }) {
         <span className="wallet-balance-amount">{(walletPoints || 0).toLocaleString()} coins</span>
       </div>
 
-      {step === 3 ? (
+      {step === 4 ? (
         <div className="content-card payment-success">
           <div className="payment-success-icon">✅</div>
           <h3>Request Submitted!</h3>
           <p>Your deposit of <strong>₹{amount}</strong> is under review. Coins will be added within 30 minutes after verification.</p>
-          <button className="primary-button" onClick={() => { setStep(1); setAmount(""); setUtrNumber(""); setMsg(null); }}>Make Another Deposit</button>
+          <button className="primary-button" onClick={() => { setStep(1); setAmount(""); setUtrNumber(""); setUtrNumber(""); setScreenshot(null); setScreenshotPreview(null); setMsg(null); }}>Make Another Deposit</button>
         </div>
       ) : (
         <div className="content-card">
@@ -929,17 +961,68 @@ function DepositScreen({ profile, walletPoints, onSuccess }) {
             ))}
           </div>
 
+          {/* STEP 1: Enter amount */}
           {step === 1 && (
+            <>
+              <label className="field-label">Amount (₹)
+                <input type="number" className="text-field" placeholder={`Min ₹${settings?.min_deposit || 100}`} value={amount} onChange={e => setAmount(e.target.value)} min={settings?.min_deposit || 100} max={settings?.max_deposit || 50000}/>
+              </label>
+              {amount && coinsToAdd > 0 && (
+                <div className="coins-preview">You will receive <strong>{coinsToAdd.toLocaleString()} coins</strong></div>
+              )}
+              <div className="payment-method-tabs" style={{marginTop:12}}>
+                {[["upi", "📱 UPI / QR"], ["bank", "🏦 Bank Transfer"], ["cash", "💵 Cash Deposit"]].map(([id, label]) => (
+                  <button key={id} type="button" className={`method-tab ${method === id ? "method-tab--active" : ""}`} onClick={() => setMethod(id)}>{label}</button>
+                ))}
+              </div>
+              <button className="primary-button" type="button" disabled={!amount} onClick={() => { if(Number(amount) >= (settings?.min_deposit||100)) setStep(2); else setMsg({type:"error",text:`Min ₹${settings?.min_deposit||100}`}); }}>Continue →</button>
+            </>
+          )}
+
+          {/* STEP 2: Payment details + QR */}
+          {step === 2 && (
             <>
               {method === "upi" && settings && (
                 <div className="upi-details">
-                  {settings.upi_qr_url && <img src={settings.upi_qr_url} alt="UPI QR Code" className="upi-qr"/>}
+                  {/* Dynamic QR code for exact amount */}
+                  <div style={{textAlign:"center",marginBottom:14}}>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:8,letterSpacing:1}}>SCAN TO PAY ₹{amount}</div>
+                    <img
+                      src={getQrUrl(amount)}
+                      alt="UPI QR Code"
+                      style={{width:180,height:180,borderRadius:12,border:"2px solid #e5e7eb",background:"white",padding:8}}
+                    />
+                    <div style={{fontSize:11,color:"#9ca3af",marginTop:6}}>QR code for ₹{amount} only</div>
+                  </div>
                   <div className="upi-id-box">
                     <span className="upi-id-label">UPI ID</span>
                     <span className="upi-id-value">{settings.upi_id}</span>
-                    <button type="button" onClick={() => navigator.clipboard?.writeText(settings.upi_id)} className="copy-btn">Copy</button>
+                    <button type="button" onClick={() => { navigator.clipboard?.writeText(settings.upi_id); }} className="copy-btn">Copy</button>
                   </div>
-                  <p className="upi-instruction">Pay using any UPI app, then enter the UTR/reference number below.</p>
+                  <p className="upi-instruction">Scan QR or pay to UPI ID above. Then enter UTR number below.</p>
+                </div>
+              )}
+              {method === "bank" && settings && (
+                <div style={{background:"#f0f9ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"16px",marginBottom:14}}>
+                  <div style={{fontWeight:700,fontSize:14,color:"#1e40af",marginBottom:12}}>🏦 Bank Transfer Details</div>
+                  {[
+                    ["Account Name", settings.bank_account_name || "RoyalWin786"],
+                    ["Account Number", settings.bank_account_number || "—"],
+                    ["IFSC Code", settings.bank_ifsc || "—"],
+                    ["Bank Name", settings.bank_name || "—"],
+                    ["Amount to Transfer", `₹${amount}`],
+                  ].map(([label, value]) => (
+                    <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid #dbeafe",fontSize:13}}>
+                      <span style={{color:"#6b7280"}}>{label}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <strong style={{color:"#1e3a8a"}}>{value}</strong>
+                        {value !== "—" && value !== `₹${amount}` && (
+                          <button type="button" onClick={() => navigator.clipboard?.writeText(value)} style={{fontSize:10,padding:"2px 7px",borderRadius:6,border:"1px solid #bfdbfe",background:"white",color:"#1e40af",cursor:"pointer"}}>Copy</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <p style={{fontSize:12,color:"#6b7280",marginTop:10,marginBottom:0}}>Transfer exactly ₹{amount} and enter reference number below.</p>
                 </div>
               )}
               {method === "cash" && settings && (
@@ -948,30 +1031,29 @@ function DepositScreen({ profile, walletPoints, onSuccess }) {
                   <p>{settings.cash_deposit_instructions}</p>
                 </div>
               )}
-              <label className="field-label">Amount (₹)
-                <input type="number" className="text-field" placeholder={`Min ₹${settings?.min_deposit || 100}`} value={amount} onChange={e => setAmount(e.target.value)} min={settings?.min_deposit || 100} max={settings?.max_deposit || 50000}/>
-              </label>
-              {amount && coinsToAdd > 0 && (
-                <div className="coins-preview">You will receive <strong>{coinsToAdd.toLocaleString()} coins</strong></div>
-              )}
-              <button className="primary-button" type="button" disabled={!amount} onClick={() => { if(Number(amount) >= (settings?.min_deposit||100)) setStep(2); else setMsg({type:"error",text:`Min ₹${settings?.min_deposit||100}`}); }}>Continue →</button>
-            </>
-          )}
-
-          {step === 2 && (
-            <>
               <div className="payment-summary">
                 <div className="summary-row"><span>Amount</span><strong>₹{amount}</strong></div>
                 <div className="summary-row"><span>Coins to receive</span><strong>{coinsToAdd.toLocaleString()}</strong></div>
-                <div className="summary-row"><span>Method</span><strong>{method === "upi" ? "UPI" : "Cash"}</strong></div>
               </div>
-              {method === "upi" && (
+              {(method === "upi" || method === "bank") && (
                 <label className="field-label">UTR / Reference Number *
-                  <input type="text" className="text-field" placeholder="12-digit UTR number" value={utrNumber} onChange={e => setUtrNumber(e.target.value)}/>
+                  <input type="text" className="text-field" placeholder="Enter transaction reference number" value={utrNumber} onChange={e => setUtrNumber(e.target.value)}/>
                 </label>
               )}
               <label className="field-label">Notes (optional)
-                <input type="text" className="text-field" placeholder="e.g. Agent name, branch" value={notes} onChange={e => setNotes(e.target.value)}/>
+                <input type="text" className="text-field" placeholder="e.g. any extra info" value={notes} onChange={e => setNotes(e.target.value)}/>
+              </label>
+              {/* Screenshot Upload */}
+              <label className="field-label">Payment Screenshot (optional but recommended)
+                <div style={{marginTop:6}}>
+                  <input type="file" accept="image/*" onChange={handleScreenshot} style={{display:"none"}} id="screenshot-upload"/>
+                  <label htmlFor="screenshot-upload" style={{display:"block",padding:"12px",border:"2px dashed #e5e7eb",borderRadius:12,textAlign:"center",cursor:"pointer",background:"#f9fafb",color:"#6b7280",fontSize:13}}>
+                    {screenshotPreview ? "✅ Screenshot selected — tap to change" : "📸 Upload payment screenshot"}
+                  </label>
+                  {screenshotPreview && (
+                    <img src={screenshotPreview} alt="Screenshot preview" style={{width:"100%",maxHeight:200,objectFit:"contain",borderRadius:10,marginTop:8,border:"1px solid #e5e7eb"}}/>
+                  )}
+                </div>
               </label>
               <button className="primary-button" type="button" disabled={busy} onClick={submit}>{busy ? "Submitting…" : "Submit Deposit Request"}</button>
               <button className="text-button" type="button" onClick={() => setStep(1)}>← Back</button>
@@ -1185,6 +1267,7 @@ function AdminPaymentsTab() {
                   <div style={{fontSize:13,marginTop:4}}>₹{d.amount} via <strong>{(d.method||"").toUpperCase()}</strong> → <strong style={{color:"var(--cyan)"}}>{d.coins_to_add} coins</strong></div>
                   {d.utr_number && <div style={{fontSize:12,color:"var(--muted)"}}>UTR: {d.utr_number}</div>}
                   {d.notes && <div style={{fontSize:12,color:"var(--muted)"}}>Note: {d.notes}</div>}
+                  {d.receipt_url && <a href={d.receipt_url} target="_blank" rel="noreferrer" style={{fontSize:12,color:"var(--cyan)",display:"block",marginTop:4}}>📸 View Payment Screenshot</a>}
                   <div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>{new Date(d.created_at).toLocaleString("en-IN")}</div>
                 </div>
                 {statusBadge(d.status)}
@@ -1282,7 +1365,11 @@ function AdminPaymentSettings({ settings, onSave }) {
       <div className="panel-heading"><span>PAYMENT SETTINGS</span><h2>Configure Payments</h2></div>
       <div className="admin-form-grid">
         <label>UPI ID<input className="text-field" value={form.upi_id||""} onChange={e=>set("upi_id",e.target.value)}/></label>
-        <label>QR Code Image URL<input className="text-field" placeholder="https://..." value={form.upi_qr_url||""} onChange={e=>set("upi_qr_url",e.target.value)}/></label>
+        <label>QR Code Image URL (optional)<input className="text-field" placeholder="https://..." value={form.upi_qr_url||""} onChange={e=>set("upi_qr_url",e.target.value)}/></label>
+        <label>Bank Account Holder Name<input className="text-field" placeholder="e.g. RoyalWin786" value={form.bank_account_name||""} onChange={e=>set("bank_account_name",e.target.value)}/></label>
+        <label>Bank Account Number<input className="text-field" placeholder="e.g. 1234567890" value={form.bank_account_number||""} onChange={e=>set("bank_account_number",e.target.value)}/></label>
+        <label>IFSC Code<input className="text-field" placeholder="e.g. SBIN0001234" value={form.bank_ifsc||""} onChange={e=>set("bank_ifsc",e.target.value.toUpperCase())}/></label>
+        <label>Bank Name<input className="text-field" placeholder="e.g. State Bank of India" value={form.bank_name||""} onChange={e=>set("bank_name",e.target.value)}/></label>
         <label>Coins per ₹1<input type="number" className="text-field" value={form.coins_per_rupee||1} onChange={e=>set("coins_per_rupee",Number(e.target.value))}/></label>
         <label>Min Deposit (₹)<input type="number" className="text-field" value={form.min_deposit||100} onChange={e=>set("min_deposit",Number(e.target.value))}/></label>
         <label>Max Deposit (₹)<input type="number" className="text-field" value={form.max_deposit||50000} onChange={e=>set("max_deposit",Number(e.target.value))}/></label>
@@ -1520,12 +1607,12 @@ function AdminResultControl({ draws, players }) {
       {/* HOUSE SETTINGS TAB */}
       {tab === "house" && houseSettings && (
         <div className="content-card">
-          <div className="panel-heading"><span>HOUSE SETTINGS</span><h2>Global Game Controls</h2><p>Platform keeps this % of all bets. Players receive the remaining % as prizes (default: 40% platform, 60% players).</p></div>
+          <div className="panel-heading"><span>HOUSE SETTINGS</span><h2>Global Game Controls</h2><p>Default house edge for all players without specific controls.</p></div>
           {[
-            ["global_house_edge", "Global Platform Cut % (default: 40%)"],
-            ["lottery_house_edge", "Lottery Platform Cut %"],
-            ["card_games_house_edge", "Card Games Platform Cut % (100% - this = player RTP)"],
-            ["roulette_house_edge", "Roulette Platform Cut %"],
+            ["global_house_edge", "Global House Edge %"],
+            ["lottery_house_edge", "Lottery House Edge %"],
+            ["card_games_house_edge", "Card Games House Edge %"],
+            ["roulette_house_edge", "Roulette House Edge %"],
             ["max_win_streak", "Max Win Streak (before forced loss)"],
           ].map(([key, label]) => (
             <div key={key} style={{ marginBottom: 16 }}>
@@ -1758,10 +1845,6 @@ export default function App() {
     setAdminData((current) => ({ ...current, draws: current.draws.map((draw) => draw.id === drawId ? { ...draw, status: "cancelled" } : draw) }));
     return { refunded_tickets: 0, refunded_points: 0 };
   };
-  // PLATFORM REVENUE: 40% of all bets kept by platform, 60% distributed as prizes
-  const PLATFORM_CUT = 0.40;
-  const PLAYER_RTP = 0.60;
-
   const adminPublishResult = async (drawId, numbers) => {
     if (liveBackendActive) return publishLotteryResult(drawId, numbers);
     setAdminData((current) => ({ ...current, draws: current.draws.map((draw) => draw.id === drawId ? { ...draw, status: "published", result_numbers: [...numbers].sort((a, b) => a - b) } : draw) }));
