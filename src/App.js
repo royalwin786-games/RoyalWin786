@@ -1,5 +1,5 @@
 import { getHouseSettings, updateHouseSettings, setDrawResultControl, getDrawResultControl, getScheduledResults, scheduleResult, cancelScheduledResult, getPlayerGameControls, setPlayerGameControl, removePlayerGameControl } from "./services/resultControlService";
-import CardGameScreen, { CardGamesLobby, MultiplayerLobby, MultiplayerGame } from "./CardGames";
+import CardGameScreen, { CardGamesLobby } from "./CardGames";
 import { useEffect, useState } from "react";
 import { isSupabaseConfigured } from "./lib/supabase";
 import {
@@ -1520,12 +1520,12 @@ function AdminResultControl({ draws, players }) {
       {/* HOUSE SETTINGS TAB */}
       {tab === "house" && houseSettings && (
         <div className="content-card">
-          <div className="panel-heading"><span>HOUSE SETTINGS</span><h2>Global Game Controls</h2><p>Default house edge for all players without specific controls.</p></div>
+          <div className="panel-heading"><span>HOUSE SETTINGS</span><h2>Global Game Controls</h2><p>Platform keeps this % of all bets. Players receive the remaining % as prizes (default: 40% platform, 60% players).</p></div>
           {[
-            ["global_house_edge", "Global House Edge %"],
-            ["lottery_house_edge", "Lottery House Edge %"],
-            ["card_games_house_edge", "Card Games House Edge %"],
-            ["roulette_house_edge", "Roulette House Edge %"],
+            ["global_house_edge", "Global Platform Cut % (default: 40%)"],
+            ["lottery_house_edge", "Lottery Platform Cut %"],
+            ["card_games_house_edge", "Card Games Platform Cut % (100% - this = player RTP)"],
+            ["roulette_house_edge", "Roulette Platform Cut %"],
             ["max_win_streak", "Max Win Streak (before forced loss)"],
           ].map(([key, label]) => (
             <div key={key} style={{ marginBottom: 16 }}>
@@ -1554,7 +1554,6 @@ function AdminResultControl({ draws, players }) {
 }
 
 export default function App() {
-  const [multiplayerRoom, setMultiplayerRoom] = useState({ id: null, code: null });
   const [screen, setScreen] = useState(() => {
     if (recoveryModeRequested && liveBackendActive) return "player-reset-password";
     if (process.env.NODE_ENV === "development") {
@@ -1759,6 +1758,10 @@ export default function App() {
     setAdminData((current) => ({ ...current, draws: current.draws.map((draw) => draw.id === drawId ? { ...draw, status: "cancelled" } : draw) }));
     return { refunded_tickets: 0, refunded_points: 0 };
   };
+  // PLATFORM REVENUE: 40% of all bets kept by platform, 60% distributed as prizes
+  const PLATFORM_CUT = 0.40;
+  const PLAYER_RTP = 0.60;
+
   const adminPublishResult = async (drawId, numbers) => {
     if (liveBackendActive) return publishLotteryResult(drawId, numbers);
     setAdminData((current) => ({ ...current, draws: current.draws.map((draw) => draw.id === drawId ? { ...draw, status: "published", result_numbers: [...numbers].sort((a, b) => a - b) } : draw) }));
@@ -1803,31 +1806,10 @@ export default function App() {
       <TransactionsScreen/>
     </PlayerLayout>
   );
-  if (screen === "player-multiplayer") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-cards">
-      <div className="game-page-heading"><div><span>MULTIPLAYER</span><h1>Teen Patti Live</h1><p>Play vs real players online</p></div></div>
-      <MultiplayerLobby
-        profile={playerProfile}
-        walletPoints={walletPoints}
-        onJoinGame={(id, code) => { setMultiplayerRoom({id,code}); setScreen("player-multiplayer-room"); }}
-        onBack={() => setScreen("player-cards")}
-      />
-    </PlayerLayout>
-  );
-  if (screen === "player-multiplayer-room") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
-      <MultiplayerGame
-        roomId={multiplayerRoom.id}
-        roomCode={multiplayerRoom.code}
-        profile={playerProfile}
-        onLeave={() => { setMultiplayerRoom({id:null,code:null}); setScreen("player-cards"); }}
-      />
-    </PlayerLayout>
-  );
   if (screen === "player-cards") return (
     <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <div className="game-page-heading"><div><span>CARD GAMES</span><h1>Play & Win</h1><p>Teen Patti, Andar Bahar, Rummy</p></div></div>
-      <CardGamesLobby onSelectGame={(game) => { if (game === "multiplayer") setScreen("player-multiplayer"); else setScreen("player-card-" + game); }}/>
+      <CardGamesLobby onSelectGame={(game) => setScreen("player-card-" + game)}/>
     </PlayerLayout>
   );
   if (screen === "player-card-teen-patti") return (
