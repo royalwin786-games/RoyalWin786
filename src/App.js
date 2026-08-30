@@ -1,5 +1,5 @@
 import { getHouseSettings, updateHouseSettings, setDrawResultControl, getDrawResultControl, getScheduledResults, scheduleResult, cancelScheduledResult, getPlayerGameControls, setPlayerGameControl, removePlayerGameControl } from "./services/resultControlService";
-import CardGameScreen, { CardGamesLobby } from "./CardGames";
+import CardGameScreen, { CardGamesLobby, MultiplayerLobby, MultiplayerGame } from "./CardGames";
 import { useEffect, useState } from "react";
 import { isSupabaseConfigured } from "./lib/supabase";
 import {
@@ -33,7 +33,7 @@ import {
   verifyLotteryTicket,
 } from "./services/gameService";
 
-const lotteryNumbers = Array.from({ length: 100 }, (_, index) => index);
+const lotteryNumbers = Array.from({ length: 36 }, (_, index) => index + 1);
 const rouletteNumbers = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27];
 const redRouletteNumbers = new Set([32, 19, 21, 25, 34, 27]);
 const initialPlayerTickets = [
@@ -511,7 +511,7 @@ function LotteryGame({ onNavigate, onLogout, onSave, draw }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const pickCount = draw?.picks_required || 6;
-  const availableNumbers = Array.from({ length: draw?.max_number || lotteryNumbers.length }, (_, index) => index);
+  const availableNumbers = Array.from({ length: draw?.max_number || lotteryNumbers.length }, (_, index) => index + 1);
   const toggleNumber = (number) => {
     setSaved(false);
     setError("");
@@ -537,7 +537,7 @@ function LotteryGame({ onNavigate, onLogout, onSave, draw }) {
       <div className="lottery-game-layout">
         <section className="content-card number-picker-card">
           <div className="picker-heading"><div><span>YOUR NUMBERS</span><h2>{selected.length}/{pickCount} selected</h2></div><button type="button" onClick={quickPick}><Icon name="sparkle" size={18}/>Quick Pick</button></div>
-          <div className="lottery-number-grid">{availableNumbers.map((number) => <button type="button" key={number} className={selected.includes(number) ? "selected" : ""} aria-pressed={selected.includes(number)} onClick={() => toggleNumber(number)}>{String(number).padStart(2, "0")}</button>)}</div>
+          <div className="lottery-number-grid">{availableNumbers.map((number) => <button type="button" key={number} className={selected.includes(number) ? "selected" : ""} aria-pressed={selected.includes(number)} onClick={() => toggleNumber(number)}>{number}</button>)}</div>
         </section>
         <aside className="content-card ticket-builder-card">
           <span className="game-kicker"><Icon name="ticket" size={18}/>Your lottery ticket</span>
@@ -826,7 +826,7 @@ function AdminConsole({ data, onCreateDraw, onOpenDraw, onCancelDraw, onPublishR
           {adminTab === "draws" && <div><div className="admin-workspace-grid">
             <form className="content-card admin-form-card" onSubmit={createDraw}>
               <div className="panel-heading"><span>NEW DRAW</span><h2>Create lottery draw</h2><p>New draws start as drafts and must be opened separately.</p></div>
-              <div className="admin-form-grid"><label>Draw code<input required value={drawForm.code} onChange={(event) => setDrawForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}/></label><label>Draw name<input required value={drawForm.name} onChange={(event) => setDrawForm((current) => ({ ...current, name: event.target.value }))}/></label><label>Sales close<input required type="datetime-local" value={drawForm.closesAt} onChange={(event) => setDrawForm((current) => ({ ...current, closesAt: event.target.value }))}/></label><label>Draw time<input required type="datetime-local" value={drawForm.drawAt} onChange={(event) => setDrawForm((current) => ({ ...current, drawAt: event.target.value }))}/></label><label>Maximum number<input required type="number" min="6" max="100" value={drawForm.maxNumber} onChange={(event) => setDrawForm((current) => ({ ...current, maxNumber: event.target.value }))}/></label><label>Numbers to pick<input required type="number" min="4" max="12" value={drawForm.picksRequired} onChange={(event) => setDrawForm((current) => ({ ...current, picksRequired: event.target.value }))}/></label><label>Entry points<input required type="number" min="0" max="100000" value={drawForm.entryPoints} onChange={(event) => setDrawForm((current) => ({ ...current, entryPoints: event.target.value }))}/></label><label>Top reward label<input required value={drawForm.prizeLabel} onChange={(event) => setDrawForm((current) => ({ ...current, prizeLabel: event.target.value }))}/></label></div>
+              <div className="admin-form-grid"><label>Draw code<input required value={drawForm.code} onChange={(event) => setDrawForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}/></label><label>Draw name<input required value={drawForm.name} onChange={(event) => setDrawForm((current) => ({ ...current, name: event.target.value }))}/></label><label>Sales close<input required type="datetime-local" value={drawForm.closesAt} onChange={(event) => setDrawForm((current) => ({ ...current, closesAt: event.target.value }))}/></label><label>Draw time<input required type="datetime-local" value={drawForm.drawAt} onChange={(event) => setDrawForm((current) => ({ ...current, drawAt: event.target.value }))}/></label><label>Maximum number<input required type="number" min="6" max="99" value={drawForm.maxNumber} onChange={(event) => setDrawForm((current) => ({ ...current, maxNumber: event.target.value }))}/></label><label>Numbers to pick<input required type="number" min="4" max="12" value={drawForm.picksRequired} onChange={(event) => setDrawForm((current) => ({ ...current, picksRequired: event.target.value }))}/></label><label>Entry points<input required type="number" min="0" max="100000" value={drawForm.entryPoints} onChange={(event) => setDrawForm((current) => ({ ...current, entryPoints: event.target.value }))}/></label><label>Top reward label<input required value={drawForm.prizeLabel} onChange={(event) => setDrawForm((current) => ({ ...current, prizeLabel: event.target.value }))}/></label></div>
               <button className="primary-button" type="submit" disabled={Boolean(busy)}>{busy === "create" ? "Creating…" : "Create draft draw"}</button>
             </form>
 
@@ -1554,6 +1554,7 @@ function AdminResultControl({ draws, players }) {
 }
 
 export default function App() {
+  const [multiplayerRoom, setMultiplayerRoom] = useState({ id: null, code: null });
   const [screen, setScreen] = useState(() => {
     if (recoveryModeRequested && liveBackendActive) return "player-reset-password";
     if (process.env.NODE_ENV === "development") {
@@ -1802,10 +1803,31 @@ export default function App() {
       <TransactionsScreen/>
     </PlayerLayout>
   );
+  if (screen === "player-multiplayer") return (
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-cards">
+      <div className="game-page-heading"><div><span>MULTIPLAYER</span><h1>Teen Patti Live</h1><p>Play vs real players online</p></div></div>
+      <MultiplayerLobby
+        profile={playerProfile}
+        walletPoints={walletPoints}
+        onJoinGame={(id, code) => { setMultiplayerRoom({id,code}); setScreen("player-multiplayer-room"); }}
+        onBack={() => setScreen("player-cards")}
+      />
+    </PlayerLayout>
+  );
+  if (screen === "player-multiplayer-room") return (
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+      <MultiplayerGame
+        roomId={multiplayerRoom.id}
+        roomCode={multiplayerRoom.code}
+        profile={playerProfile}
+        onLeave={() => { setMultiplayerRoom({id:null,code:null}); setScreen("player-cards"); }}
+      />
+    </PlayerLayout>
+  );
   if (screen === "player-cards") return (
     <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <div className="game-page-heading"><div><span>CARD GAMES</span><h1>Play & Win</h1><p>Teen Patti, Andar Bahar, Rummy</p></div></div>
-      <CardGamesLobby onSelectGame={(game) => setScreen("player-card-" + game)}/>
+      <CardGamesLobby onSelectGame={(game) => { if (game === "multiplayer") setScreen("player-multiplayer"); else setScreen("player-card-" + game); }}/>
     </PlayerLayout>
   );
   if (screen === "player-card-teen-patti") return (
