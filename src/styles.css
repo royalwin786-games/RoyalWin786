@@ -1295,9 +1295,7 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 /* ---- Auth Screen ---- */
-.otp-screen, .mpin-screen {
-  background: linear-gradient(160deg, #f0f5ff 0%, #f6f8fc 60%, #fff9ef 100%) !important;
-}
+/* Background kept from original styles - do not override */
 .auth-card {
   border-radius: var(--radius-xl) !important;
   box-shadow: var(--shadow-lg) !important;
