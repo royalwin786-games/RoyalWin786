@@ -1661,7 +1661,6 @@ function AdminResultControl({ draws, players }) {
 
 export default function App() {
   const [multiplayerRoom, setMultiplayerRoom] = useState({ id: null, code: null });
-  const [multiplayerRoom, setMultiplayerRoom] = useState({ id: null, code: null });
   const [screen, setScreen] = useState(() => {
     if (recoveryModeRequested && liveBackendActive) return "player-reset-password";
     if (process.env.NODE_ENV === "development") {
@@ -1919,17 +1918,6 @@ export default function App() {
   if (screen === "player-multiplayer-room") return (
     <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <MultiplayerGame roomId={multiplayerRoom.id} roomCode={multiplayerRoom.code} profile={playerProfile} onLeave={()=>{ setMultiplayerRoom({id:null,code:null}); setScreen("player-cards"); }}/>
-    </PlayerLayout>
-  );
-  if (screen === "player-multiplayer") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-cards">
-      <div className="game-page-heading"><div><span>MULTIPLAYER</span><h1>Teen Patti Live</h1><p>Play vs real players online</p></div></div>
-      <MultiplayerLobby profile={playerProfile} walletPoints={walletPoints} onJoinGame={(id,code)=>{setMultiplayerRoom({id,code});setScreen("player-multiplayer-room");}}/>
-    </PlayerLayout>
-  );
-  if (screen === "player-multiplayer-room") return (
-    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
-      <MultiplayerGame roomId={multiplayerRoom.id} roomCode={multiplayerRoom.code} profile={playerProfile} onLeave={()=>{setMultiplayerRoom({id:null,code:null});setScreen("player-cards");}}/>
     </PlayerLayout>
   );
   if (screen === "player-cards") return (
