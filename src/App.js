@@ -1,5 +1,5 @@
 import { getHouseSettings, updateHouseSettings, setDrawResultControl, getDrawResultControl, getScheduledResults, scheduleResult, cancelScheduledResult, getPlayerGameControls, setPlayerGameControl, removePlayerGameControl } from "./services/resultControlService";
-import CardGameScreen, { CardGamesLobby } from "./CardGames";
+import CardGameScreen, { CardGamesLobby, MultiplayerLobby, MultiplayerGame } from "./CardGames";
 import { useEffect, useState } from "react";
 import { isSupabaseConfigured } from "./lib/supabase";
 import {
@@ -33,7 +33,7 @@ import {
   verifyLotteryTicket,
 } from "./services/gameService";
 
-const lotteryNumbers = Array.from({ length: 36 }, (_, index) => index + 1);
+const lotteryNumbers = Array.from({ length: 100 }, (_, index) => index);
 const rouletteNumbers = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27];
 const redRouletteNumbers = new Set([32, 19, 21, 25, 34, 27]);
 const initialPlayerTickets = [
@@ -184,6 +184,24 @@ function AuthField({ label, prefix, ...inputProps }) {
   );
 }
 
+
+// ===== GREETING BANNER =====
+function GreetingBanner({ name = "Pratik" }) {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(false), 4000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!visible) return null;
+  return (
+    <div className="greeting-banner">
+      <span className="greeting-wave">👋</span>
+      <span className="greeting-text">Welcome Back, <strong>{name}</strong>!</span>
+      <button className="greeting-close" onClick={() => setVisible(false)}>✕</button>
+    </div>
+  );
+}
+
 function PlayerLogin({ identifier, setIdentifier, onLogin, onRegister, onForgot, onAdmin, backendEnabled, notice }) {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -200,6 +218,7 @@ function PlayerLogin({ identifier, setIdentifier, onLogin, onRegister, onForgot,
   return (
     <AppFrame className="auth-frame player-auth-frame">
       <div className="otp-screen player-login-screen">
+        <GreetingBanner name="Pratik"/>
         <button type="button" className="admin-access-link" onClick={onAdmin}><Icon name="lock" size={16}/>Admin Login</button>
         <Brand />
         <form className="auth-card otp-card player-password-card" onSubmit={submit}>
@@ -511,7 +530,7 @@ function LotteryGame({ onNavigate, onLogout, onSave, draw }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const pickCount = draw?.picks_required || 6;
-  const availableNumbers = Array.from({ length: draw?.max_number || lotteryNumbers.length }, (_, index) => index + 1);
+  const availableNumbers = Array.from({ length: draw?.max_number || lotteryNumbers.length }, (_, index) => index);
   const toggleNumber = (number) => {
     setSaved(false);
     setError("");
@@ -537,7 +556,7 @@ function LotteryGame({ onNavigate, onLogout, onSave, draw }) {
       <div className="lottery-game-layout">
         <section className="content-card number-picker-card">
           <div className="picker-heading"><div><span>YOUR NUMBERS</span><h2>{selected.length}/{pickCount} selected</h2></div><button type="button" onClick={quickPick}><Icon name="sparkle" size={18}/>Quick Pick</button></div>
-          <div className="lottery-number-grid">{availableNumbers.map((number) => <button type="button" key={number} className={selected.includes(number) ? "selected" : ""} aria-pressed={selected.includes(number)} onClick={() => toggleNumber(number)}>{number}</button>)}</div>
+          <div className="lottery-number-grid">{availableNumbers.map((number) => <button type="button" key={number} className={selected.includes(number) ? "selected" : ""} aria-pressed={selected.includes(number)} onClick={() => toggleNumber(number)}>{String(number).padStart(2, "0")}</button>)}</div>
         </section>
         <aside className="content-card ticket-builder-card">
           <span className="game-kicker"><Icon name="ticket" size={18}/>Your lottery ticket</span>
@@ -1641,6 +1660,8 @@ function AdminResultControl({ draws, players }) {
 }
 
 export default function App() {
+  const [multiplayerRoom, setMultiplayerRoom] = useState({ id: null, code: null });
+  const [multiplayerRoom, setMultiplayerRoom] = useState({ id: null, code: null });
   const [screen, setScreen] = useState(() => {
     if (recoveryModeRequested && liveBackendActive) return "player-reset-password";
     if (process.env.NODE_ENV === "development") {
@@ -1889,10 +1910,32 @@ export default function App() {
       <TransactionsScreen/>
     </PlayerLayout>
   );
+  if (screen === "player-multiplayer") return (
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-cards">
+      <div className="game-page-heading"><div><span>MULTIPLAYER</span><h1>Teen Patti Live</h1><p>Play vs real players</p></div></div>
+      <MultiplayerLobby profile={playerProfile} walletPoints={walletPoints} onJoinGame={(id,code)=>{ setMultiplayerRoom({id,code}); setScreen("player-multiplayer-room"); }} onBack={()=>setScreen("player-cards")}/>
+    </PlayerLayout>
+  );
+  if (screen === "player-multiplayer-room") return (
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+      <MultiplayerGame roomId={multiplayerRoom.id} roomCode={multiplayerRoom.code} profile={playerProfile} onLeave={()=>{ setMultiplayerRoom({id:null,code:null}); setScreen("player-cards"); }}/>
+    </PlayerLayout>
+  );
+  if (screen === "player-multiplayer") return (
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame" back="player-cards">
+      <div className="game-page-heading"><div><span>MULTIPLAYER</span><h1>Teen Patti Live</h1><p>Play vs real players online</p></div></div>
+      <MultiplayerLobby profile={playerProfile} walletPoints={walletPoints} onJoinGame={(id,code)=>{setMultiplayerRoom({id,code});setScreen("player-multiplayer-room");}}/>
+    </PlayerLayout>
+  );
+  if (screen === "player-multiplayer-room") return (
+    <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
+      <MultiplayerGame roomId={multiplayerRoom.id} roomCode={multiplayerRoom.code} profile={playerProfile} onLeave={()=>{setMultiplayerRoom({id:null,code:null});setScreen("player-cards");}}/>
+    </PlayerLayout>
+  );
   if (screen === "player-cards") return (
     <PlayerLayout active="player-cards" onNavigate={setScreen} onLogout={logout} className="player-game-frame">
       <div className="game-page-heading"><div><span>CARD GAMES</span><h1>Play & Win</h1><p>Teen Patti, Andar Bahar, Rummy</p></div></div>
-      <CardGamesLobby onSelectGame={(game) => setScreen("player-card-" + game)}/>
+      <CardGamesLobby onSelectGame={(game)=>{ if(game==="multiplayer") setScreen("player-multiplayer"); else setScreen("player-card-"+game); }}/>
     </PlayerLayout>
   );
   if (screen === "player-card-teen-patti") return (
