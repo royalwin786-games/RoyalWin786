@@ -1,3 +1,10 @@
+import {
+  getPaymentSettings, updatePaymentSettings, submitDeposit, submitWithdrawal,
+  getPlayerDeposits, getPlayerWithdrawals,
+  getAllDeposits, getAllWithdrawals, getAllPrizePayouts,
+  approveDeposit, rejectDeposit,
+  approveWithdrawal, rejectWithdrawal, updatePrizePayout,
+} from "./services/paymentService";
 import { getHouseSettings, updateHouseSettings, setDrawResultControl, getDrawResultControl, getScheduledResults, scheduleResult, cancelScheduledResult, getPlayerGameControls, setPlayerGameControl, removePlayerGameControl } from "./services/resultControlService";
 import CardGameScreen, { CardGamesLobby, MultiplayerLobby, MultiplayerGame } from "./CardGames";
 import { useEffect, useState } from "react";
@@ -1368,7 +1375,7 @@ function AdminPaymentsTab() {
 
       {tab === "settings" && (
         <AdminPaymentSettings settings={settings || { upi_id:"", upi_qr_url:"", coins_per_rupee:1, min_deposit:100, max_deposit:50000, min_withdrawal:200, max_withdrawal:25000, bank_account_name:"", bank_account_number:"", bank_ifsc:"", bank_name:"", cash_deposit_instructions:"Visit our agent and deposit cash.", withdrawal_note:"Withdrawals processed within 24-48 hours." }} onSave={async (updated) => {
-          await updatePaymentSettings(updated);
+          try { await updatePaymentSettings(updated); } catch(e) { alert("Save failed: " + e.message); return; }
           setSettings(updated);
           showMsg("Payment settings saved!");
         }}/>
