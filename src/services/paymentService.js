@@ -1,4 +1,4 @@
-import { requireSupabase } from "./supabase";
+import { requireSupabase } from "../lib/supabase";
 
 // ===== PAYMENT SETTINGS =====
 export async function getPaymentSettings() {
